@@ -34,6 +34,18 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'flash' => [
+                // Identificador do chamado recém-aberto (CHA-02), exibido nos detalhes.
+                'ticketCreated' => fn () => $this->flashed($request, 'ticketCreated'),
+                // Confirmações gerais, exibidas pela página de destino (ex.: edição na CHA-04).
+                'success' => fn () => $this->flashed($request, 'success'),
+                'info' => fn () => $this->flashed($request, 'info'),
+            ],
         ];
+    }
+
+    private function flashed(Request $request, string $key): ?string
+    {
+        return $request->hasSession() ? $request->session()->get($key) : null;
     }
 }

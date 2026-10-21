@@ -7,7 +7,6 @@ use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -150,6 +149,8 @@ test('rows expose only the listing fields', function () {
                 ->hasAll([
                     'number', 'title', 'requester', 'department', 'category', 'priority',
                     'status', 'assignee', 'created_at', 'updated_at', 'sla',
+                    // Flag de exibição da autoatribuição (CHA-06), não um dado do chamado.
+                    'can_self_assign',
                 ])));
 });
 
@@ -171,15 +172,10 @@ test('rows use labels, the public identifier and neutral values for missing data
         ->and($row['sla'])->toBe('paused');
 });
 
-test('opening and detail actions are not offered while their routes do not exist', function () {
-    $user = User::factory()->withRole('requester')->create();
-
-    expect(Route::has('tickets.create'))->toBeFalse()
-        ->and(Route::has('tickets.show'))->toBeFalse();
-
-    $this->actingAs($user)
+test('the opening action follows the create policy (CHA-02)', function () {
+    $this->actingAs(User::factory()->withRole('requester')->create())
         ->get('/tickets')
-        ->assertInertia(fn (Assert $page) => $page->where('can.create', false));
+        ->assertInertia(fn (Assert $page) => $page->where('can.create', true));
 });
 
 /* ---------- Pesquisa e filtros ---------- */

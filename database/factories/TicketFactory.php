@@ -8,23 +8,25 @@ use App\Models\Department;
 use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\User;
+use App\Support\TicketNumberGenerator;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Apenas para testes. A geração definitiva do identificador (RF-06) será feita
- * pelo backend na abertura do chamado.
+ * Apenas para testes. Na aplicação, o identificador (RF-06) é gerado por
+ * TicketNumberGenerator dentro de OpenTicket; aqui o mesmo formato vem do Faker
+ * com unique() para evitar colisões entre registros de teste.
  *
  * @extends Factory<Ticket>
  */
 class TicketFactory extends Factory
 {
-    /** Alfabeto sem caracteres ambíguos (O/0, I/1). */
-    private const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
     public function definition(): array
     {
+        $alphabet = TicketNumberGenerator::ALPHABET;
+        $length = TicketNumberGenerator::LENGTH;
+
         return [
-            'ticket_number' => 'HD-'.fake()->unique()->regexify('['.self::ALPHABET.']{8}'),
+            'ticket_number' => TicketNumberGenerator::PREFIX.fake()->unique()->regexify("[{$alphabet}]{{$length}}"),
             'title' => fake()->sentence(4),
             'description' => fake()->paragraph(),
             'category_id' => TicketCategory::factory(),

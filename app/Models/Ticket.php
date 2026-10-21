@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ticket extends Model
 {
@@ -22,6 +23,12 @@ class Ticket extends Model
      * são definidos pelo backend (RF-05).
      */
     protected $fillable = ['title', 'description', 'category_id', 'priority'];
+
+    /** `title` é VARCHAR(255). */
+    public const TITLE_MAX_LENGTH = 255;
+
+    /** `description` é TEXT (65.535 bytes): 16.383 caracteres cabem mesmo com 4 bytes cada (utf8mb4). */
+    public const DESCRIPTION_MAX_LENGTH = 16383;
 
     protected function casts(): array
     {
@@ -54,6 +61,32 @@ class Ticket extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(TicketCategory::class, 'category_id');
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(TicketComment::class);
+    }
+
+    public function histories(): HasMany
+    {
+        return $this->hasMany(TicketHistory::class);
+    }
+
+    /**
+     * Assinatura dos atributos editáveis na CHA-04. Detecta se outra pessoa alterou prioridade,
+     * categoria ou departamento enquanto o formulário estava aberto, sem depender de
+     * `updated_at` (que também muda a cada comentário).
+     */
+    public function editVersion(): string
+    {
+        return sha1(implode('|', [$this->priority->value, $this->category_id, $this->department_id]));
+    }
+
+    /** A URL pública usa o identificador `HD-XXXXXXXX`, nunca a chave primária (RF-06). */
+    public function getRouteKeyName(): string
+    {
+        return 'ticket_number';
     }
 
     /**
@@ -136,6 +169,26 @@ class Ticket extends Model
             }
 
             return $this->resolved_at->lte($due) ? SlaState::Met : SlaState::Overdue;
+        }
+
+        return $now->gt($due) ? SlaState::Overdue : SlaState::OnTrack;
+    }
+
+    /**
+     * Situação do SLA de primeira resposta (RF-15.1). Independe das pausas, que afetam apenas
+     * a resolução. Como slaState(), só compara os instantes gravados pelo backend.
+     */
+    public function firstResponseSlaState(?CarbonInterface $now = null): SlaState
+    {
+        $now ??= now();
+        $due = $this->first_response_due_at;
+
+        if ($due === null) {
+            return SlaState::None;
+        }
+
+        if ($this->first_response_at !== null) {
+            return $this->first_response_at->lte($due) ? SlaState::Met : SlaState::Overdue;
         }
 
         return $now->gt($due) ? SlaState::Overdue : SlaState::OnTrack;

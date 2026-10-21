@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -60,6 +61,23 @@ class User extends Authenticatable
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Técnicos que podem receber um chamado por atribuição (RF-08): ativos e com
+     * `tickets.self_assign`, a permissão que identifica quem assume atendimentos (RF-09).
+     * O PRD não define elegibilidade além disso; este é o único ponto a ajustar se ela mudar.
+     */
+    public function scopeEligibleAssignees(Builder $query): Builder
+    {
+        return $query->where('users.is_active', true)
+            ->whereHas('role.permissions', fn (Builder $query) => $query->where('slug', 'tickets.self_assign'));
+    }
+
+    /** Mesma regra de scopeEligibleAssignees(), para um usuário já carregado. */
+    public function isEligibleAssignee(): bool
+    {
+        return $this->is_active && $this->hasPermission('tickets.self_assign');
     }
 
     /**

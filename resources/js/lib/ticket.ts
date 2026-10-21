@@ -74,6 +74,65 @@ export interface TicketListItem {
     updated_at: string | null;
     /** Calculado no backend. `none`: o chamado ainda não tem prazo de resolução. */
     sla: SlaState | 'none';
+    /** Exibição do botão "Assumir" (CHA-06); o backend revalida ao assumir. */
+    can_self_assign: boolean;
+}
+
+/** Dados do solicitante na abertura (CHA-02). Somente leitura, vindos do backend. */
+export interface TicketRequester {
+    name: string;
+    email: string;
+    department: string | null;
+    departmentActive: boolean;
+}
+
+/** Detalhes do chamado (CHA-03). Nunca traz a chave primária interna. */
+export interface TicketDetail {
+    number: string;
+    title: string;
+    description: string;
+    requester: string | null;
+    department: string | null;
+    category: string | null;
+    priority: TicketPriority;
+    status: TicketStatus;
+    assignee: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+/** Um indicador de SLA calculado no backend. `none`: ainda não há prazo gravado. */
+export interface TicketSlaIndicator {
+    state: Exclude<SlaState, 'at_risk'> | 'none';
+    due_at: string | null;
+    /** Instante em que a meta foi atingida (primeira resposta ou resolução). */
+    met_at: string | null;
+}
+
+/** Mensagem do chamado (RF-11). Notas internas só chegam a quem pode lê-las. */
+export interface TicketCommentItem {
+    id: number;
+    author: string | null;
+    body: string;
+    internal: boolean;
+    created_at: string | null;
+}
+
+/** Técnico responsável ou elegível para atribuição (CHA-05). */
+export interface TicketTechnician {
+    id: number;
+    name: string;
+    department: string | null;
+}
+
+/** Evento de auditoria (RF-19), enviado somente a quem tem `audit.view`. */
+export interface TicketHistoryItem {
+    id: number;
+    title: string;
+    author: string | null;
+    from: string | null;
+    to: string | null;
+    created_at: string | null;
 }
 
 export const ticketFilterKeys = [

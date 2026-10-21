@@ -22,4 +22,10 @@ export type PageProps<
     auth: {
         user: User;
     };
+    flash: {
+        /** Identificador do chamado recém-aberto (CHA-02). */
+        ticketCreated: string | null;
+        success: string | null;
+        info: string | null;
+    };
 };

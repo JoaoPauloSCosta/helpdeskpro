@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
 import Card from '@/Components/Card.vue';
@@ -20,6 +20,7 @@ import StatusBadge from '@/Components/StatusBadge.vue';
 import TextInput from '@/Components/TextInput.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import SelfAssignModal from '@/Pages/Tickets/Partials/SelfAssignModal.vue';
 import {
     formatDate,
     formatDateTime,
@@ -219,6 +220,18 @@ const activeChips = computed(() =>
 /* ---------- Resultados ---------- */
 
 const rows = computed(() => props.tickets.data);
+
+/* ---------- Autoatribuição (CHA-06) ---------- */
+
+const selfAssignNumber = ref<string | null>(null);
+/** A coluna de ação só aparece quando há algum chamado que o usuário pode assumir. */
+const showSelfAssign = computed(() => rows.value.some((ticket) => ticket.can_self_assign));
+const selfAssignError = computed(() => serverErrors.value.self_assign);
+const actionColumnClass = 'sticky right-0 border-l border-neutral-200';
+
+/** Título como link para os detalhes (CHA-03); azul de texto usa primary-600 (design-system.md, 2.1). */
+const titleLinkClass =
+    'rounded text-neutral-900 hover:text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500';
 const isEmpty = computed(() => rows.value.length === 0);
 
 const mobileSort = computed({
@@ -402,6 +415,10 @@ const mobileSort = computed({
                 </form>
             </Card>
 
+            <Alert v-if="selfAssignError" variant="warning" title="Não foi possível assumir o chamado">
+                {{ selfAssignError }}
+            </Alert>
+
             <Alert v-if="loadError" variant="danger" title="Não foi possível carregar os chamados">
                 <p>Verifique sua conexão e tente novamente.</p>
                 <Button variant="secondary" size="sm" class="mt-3" @click="retry">Tentar novamente</Button>
@@ -482,12 +499,21 @@ const mobileSort = computed({
                                         <SortableHeader label="Abertura" :direction="direction('created_at')" @sort="sortBy('created_at')" />
                                         <SortableHeader label="Atualização" :direction="direction('updated_at')" @sort="sortBy('updated_at')" />
                                         <th scope="col">SLA</th>
+                                        <!-- Fixa à direita para o botão ficar visível sem rolar a tabela. Por ser
+                                             posicionada, também mantém o texto sr-only dentro da área com rolagem. -->
+                                        <th v-if="showSelfAssign" scope="col" :class="actionColumnClass" class="bg-neutral-100">
+                                            <span class="sr-only">Ações</span>
+                                        </th>
                                     </tr>
                                 </template>
 
                                 <tr v-for="ticket in rows" :key="ticket.number">
                                     <td class="whitespace-nowrap"><TicketNumber :number="ticket.number" /></td>
-                                    <td class="min-w-[14rem] font-medium">{{ ticket.title }}</td>
+                                    <td class="min-w-[14rem] font-medium">
+                                        <Link :href="route('tickets.show', ticket.number)" :class="titleLinkClass">
+                                            {{ ticket.title }}
+                                        </Link>
+                                    </td>
                                     <td class="whitespace-nowrap text-neutral-600">{{ ticket.requester ?? '—' }}</td>
                                     <td class="whitespace-nowrap text-neutral-600">{{ ticket.department ?? '—' }}</td>
                                     <td class="whitespace-nowrap text-neutral-600">{{ ticket.category ?? '—' }}</td>
@@ -502,6 +528,21 @@ const mobileSort = computed({
                                     <td class="whitespace-nowrap">
                                         <SlaIndicator v-if="ticket.sla !== 'none'" :state="ticket.sla" />
                                         <span v-else class="text-xs text-neutral-500">Sem prazo definido</span>
+                                    </td>
+                                    <td
+                                        v-if="showSelfAssign"
+                                        :class="actionColumnClass"
+                                        class="whitespace-nowrap bg-white text-right [tr:hover_&]:bg-neutral-100"
+                                    >
+                                        <Button
+                                            v-if="ticket.can_self_assign"
+                                            size="sm"
+                                            variant="secondary"
+                                            :aria-label="`Assumir chamado ${ticket.number}`"
+                                            @click="selfAssignNumber = ticket.number"
+                                        >
+                                            Assumir
+                                        </Button>
                                     </td>
                                 </tr>
 
@@ -524,7 +565,11 @@ const mobileSort = computed({
                                         <TicketNumber :number="ticket.number" />
                                         <StatusBadge :status="ticket.status" />
                                     </div>
-                                    <p class="break-words text-sm font-medium text-neutral-900">{{ ticket.title }}</p>
+                                    <p class="break-words text-sm font-medium text-neutral-900">
+                                        <Link :href="route('tickets.show', ticket.number)" :class="titleLinkClass">
+                                            {{ ticket.title }}
+                                        </Link>
+                                    </p>
                                     <div class="flex flex-wrap items-center gap-2">
                                         <PriorityBadge :priority="ticket.priority" />
                                         <SlaIndicator v-if="ticket.sla !== 'none'" :state="ticket.sla" />
@@ -533,6 +578,15 @@ const mobileSort = computed({
                                     <p class="text-xs text-neutral-500">
                                         {{ ticket.assignee ?? 'Não atribuído' }} · Aberto em {{ formatDateTime(ticket.created_at) }}
                                     </p>
+                                    <Button
+                                        v-if="ticket.can_self_assign"
+                                        variant="secondary"
+                                        block
+                                        :aria-label="`Assumir chamado ${ticket.number}`"
+                                        @click="selfAssignNumber = ticket.number"
+                                    >
+                                        Assumir chamado
+                                    </Button>
                                 </li>
                             </ul>
                             <Pagination
@@ -546,5 +600,7 @@ const mobileSort = computed({
                 </div>
             </section>
         </div>
+
+        <SelfAssignModal :number="selfAssignNumber" @close="selfAssignNumber = null" />
     </AuthenticatedLayout>
 </template>
