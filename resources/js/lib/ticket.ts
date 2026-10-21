@@ -53,3 +53,53 @@ export const priorityGlyph: Record<TicketPriority, string> = {
 };
 
 export type SlaState = 'on_track' | 'at_risk' | 'overdue' | 'paused' | 'met';
+
+/** Opção de filtro vinda do backend. */
+export interface Option {
+    value: string;
+    label: string;
+}
+
+/** Linha da listagem (CHA-01). Nunca traz a chave primária interna. */
+export interface TicketListItem {
+    number: string;
+    title: string;
+    requester: string | null;
+    department: string | null;
+    category: string | null;
+    priority: TicketPriority;
+    status: TicketStatus;
+    assignee: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    /** Calculado no backend. `none`: o chamado ainda não tem prazo de resolução. */
+    sla: SlaState | 'none';
+}
+
+export const ticketFilterKeys = [
+    'q', 'number', 'title', 'requester', 'department', 'category',
+    'priority', 'status', 'assignee', 'opened_from', 'opened_to', 'sla',
+] as const;
+
+export type TicketFilterKey = (typeof ticketFilterKeys)[number];
+export type TicketFilters = Partial<Record<TicketFilterKey, string>>;
+
+export type TicketSortKey = 'number' | 'title' | 'priority' | 'status' | 'assignee' | 'created_at' | 'updated_at';
+
+export interface TicketFilterOptions {
+    statuses: Option[];
+    priorities: Option[];
+    slaStates: Option[];
+    departments: Option[];
+    categories: Option[];
+    requesters: Option[];
+    assignees: Option[];
+}
+
+const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+/** Data e hora no fuso do navegador (ex.: 21/10/2026 09:12). */
+export const formatDateTime = (iso: string | null): string => (iso ? dateTime.format(new Date(iso)) : '—');
+
+/** Converte AAAA-MM-DD em DD/MM/AAAA sem conversão de fuso. */
+export const formatDate = (ymd: string): string => ymd.split('-').reverse().join('/');
