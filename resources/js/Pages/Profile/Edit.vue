@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import PageHeader from '@/Components/PageHeader.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import DeleteUserForm from './Partials/DeleteUserForm.vue';
+import ProfileSummaryCard from './Partials/ProfileSummaryCard.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
 import { Head } from '@inertiajs/vue3';
@@ -12,39 +14,25 @@ defineProps<{
 </script>
 
 <template>
-    <Head title="Profile" />
+    <Head title="Meu perfil" />
 
     <AuthenticatedLayout>
-        <template #header>
-            <h2
-                class="text-xl font-semibold leading-tight text-neutral-800"
-            >
-                Profile
-            </h2>
-        </template>
+        <div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+            <PageHeader
+                title="Meu perfil"
+                subtitle="Gerencie suas informações pessoais e os dados da sua conta."
+            />
 
-        <div class="py-12">
-            <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
+            <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+                <ProfileSummaryCard :must-verify-email="mustVerifyEmail" />
+
+                <div class="space-y-6 lg:col-span-2">
                     <UpdateProfileInformationForm
                         :must-verify-email="mustVerifyEmail"
                         :status="status"
-                        class="max-w-xl"
                     />
-                </div>
-
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
-                    <UpdatePasswordForm class="max-w-xl" />
-                </div>
-
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
-                    <DeleteUserForm class="max-w-xl" />
+                    <UpdatePasswordForm />
+                    <DeleteUserForm />
                 </div>
             </div>
         </div>

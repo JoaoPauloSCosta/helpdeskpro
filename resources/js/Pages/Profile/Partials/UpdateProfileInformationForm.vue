@@ -1,108 +1,102 @@
 <script setup lang="ts">
-import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
+import Button from '@/Components/Button.vue';
+import Card from '@/Components/Card.vue';
+import FormField from '@/Components/FormField.vue';
 import TextInput from '@/Components/TextInput.vue';
+import { useToast } from '@/composables/useToast';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
 
 defineProps<{
-    mustVerifyEmail?: Boolean;
-    status?: String;
+    mustVerifyEmail?: boolean;
+    status?: string;
 }>();
 
-const user = usePage().props.auth.user;
+const page = usePage();
+const toast = useToast();
 
 const form = useForm({
-    name: user.name,
-    email: user.email,
+    name: page.props.auth.user.name,
+    email: page.props.auth.user.email,
 });
+
+const submit = () => {
+    form.patch(route('profile.update'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            // Alinha o formulário ao que o servidor gravou (ex.: e-mail em minúsculas).
+            const saved = page.props.auth.user;
+            form.defaults({ name: saved.name, email: saved.email }).reset();
+            toast.success('Alterações salvas com sucesso.');
+        },
+        onError: (errors) => {
+            if (errors.name || errors.email) return;
+            toast.error('Não foi possível salvar as alterações. Tente novamente.');
+        },
+    });
+};
+
+const cancel = () => {
+    form.reset();
+    form.clearErrors();
+};
 </script>
 
 <template>
-    <section>
-        <header>
-            <h2 class="text-lg font-medium text-neutral-900">
-                Profile Information
-            </h2>
-
-            <p class="mt-1 text-sm text-neutral-600">
-                Update your account's profile information and email address.
-            </p>
-        </header>
-
-        <form
-            @submit.prevent="form.patch(route('profile.update'))"
-            class="mt-6 space-y-6"
-        >
-            <div>
-                <InputLabel for="name" value="Name" />
-
+    <Card title="Informações pessoais">
+        <form class="space-y-4" novalidate @submit.prevent="submit">
+            <FormField label="Nome completo" :error="form.errors.name" required v-slot="{ id, describedby, invalid }">
                 <TextInput
-                    id="name"
-                    type="text"
-                    class="mt-1 block w-full"
+                    :id="id"
                     v-model="form.name"
-                    required
-                    autofocus
+                    type="text"
                     autocomplete="name"
-                />
-
-                <InputError class="mt-2" :message="form.errors.name" />
-            </div>
-
-            <div>
-                <InputLabel for="email" value="Email" />
-
-                <TextInput
-                    id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    v-model="form.email"
                     required
-                    autocomplete="username"
+                    :invalid="invalid"
+                    :aria-describedby="describedby"
                 />
+            </FormField>
 
-                <InputError class="mt-2" :message="form.errors.email" />
-            </div>
+            <FormField label="E-mail" :error="form.errors.email" required v-slot="{ id, describedby, invalid }">
+                <TextInput
+                    :id="id"
+                    v-model="form.email"
+                    type="email"
+                    autocomplete="username"
+                    required
+                    :invalid="invalid"
+                    :aria-describedby="describedby"
+                />
+            </FormField>
 
-            <div v-if="mustVerifyEmail && user.email_verified_at === null">
-                <p class="mt-2 text-sm text-neutral-800">
-                    Your email address is unverified.
+            <div v-if="mustVerifyEmail && page.props.auth.user.email_verified_at === null" class="text-sm text-neutral-700">
+                <p>
+                    Seu e-mail ainda não foi verificado.
                     <Link
                         :href="route('verification.send')"
                         method="post"
                         as="button"
-                        class="rounded-md text-sm text-neutral-600 underline hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                        class="rounded-md font-semibold text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                     >
-                        Click here to re-send the verification email.
+                        Reenviar e-mail de verificação
                     </Link>
                 </p>
-
-                <div
-                    v-show="status === 'verification-link-sent'"
-                    class="mt-2 text-sm font-medium text-success-text"
-                >
-                    A new verification link has been sent to your email address.
-                </div>
+                <p v-if="status === 'verification-link-sent'" class="mt-2 font-medium text-success-text" role="status">
+                    Um novo link de verificação foi enviado para o seu e-mail.
+                </p>
             </div>
 
-            <div class="flex items-center gap-4">
-                <PrimaryButton :disabled="form.processing">Save</PrimaryButton>
+            <p class="text-xs text-neutral-500">
+                Ao alterar o e-mail, o novo endereço precisará ser verificado novamente.
+            </p>
 
-                <Transition
-                    enter-active-class="transition ease-in-out"
-                    enter-from-class="opacity-0"
-                    leave-active-class="transition ease-in-out"
-                    leave-to-class="opacity-0"
-                >
-                    <p
-                        v-if="form.recentlySuccessful"
-                        class="text-sm text-neutral-600"
-                    >
-                        Saved.
-                    </p>
-                </Transition>
+            <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Button v-if="form.isDirty" variant="secondary" :disabled="form.processing" @click="cancel">
+                    Cancelar
+                </Button>
+                <Button type="submit" :loading="form.processing" :disabled="!form.isDirty">
+                    Salvar alterações
+                </Button>
             </div>
         </form>
-    </section>
+    </Card>
 </template>
