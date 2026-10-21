@@ -30,6 +30,53 @@ enum TicketStatus: string
         };
     }
 
+    /**
+     * Transições do RF-10 a partir deste status e a operação que executa cada uma. Transições
+     * não listadas são rejeitadas (RN-06). Aberto → Em atendimento também ocorre pela
+     * autoatribuição (RF-09), que altera responsável e status juntos.
+     *
+     * @return array<string, TicketTransitionFlow> Chave: valor do status de destino.
+     */
+    public function transitions(): array
+    {
+        return match ($this) {
+            self::Open => [
+                self::InProgress->value => TicketTransitionFlow::StatusChange,
+            ],
+            self::InProgress => [
+                self::AwaitingRequester->value => TicketTransitionFlow::Pending,
+                self::Pending->value => TicketTransitionFlow::Pending,
+                self::PendingThirdParty->value => TicketTransitionFlow::Pending,
+                self::PendingDepartments->value => TicketTransitionFlow::Pending,
+                self::Resolved->value => TicketTransitionFlow::Resolution,
+            ],
+            // Retomada: o SLA de resolução volta a correr (RF-15.2).
+            self::AwaitingRequester, self::Pending, self::PendingThirdParty, self::PendingDepartments => [
+                self::InProgress->value => TicketTransitionFlow::StatusChange,
+            ],
+            self::Resolved => [
+                self::Open->value => TicketTransitionFlow::Reopening,
+                self::Closed->value => TicketTransitionFlow::Closing,
+            ],
+            self::Closed => [],
+        };
+    }
+
+    /**
+     * Destinos que a alteração de status (CHA-07) pode executar a partir deste status.
+     *
+     * @return list<self>
+     */
+    public function statusChangeTargets(): array
+    {
+        $targets = array_keys(array_filter(
+            $this->transitions(),
+            fn (TicketTransitionFlow $flow) => $flow === TicketTransitionFlow::StatusChange,
+        ));
+
+        return array_map(fn (string $value) => self::from($value), $targets);
+    }
+
     /** Status que pausam o SLA de resolução (RF-15.2). */
     public static function paused(): array
     {

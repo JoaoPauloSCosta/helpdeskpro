@@ -125,6 +125,23 @@ export interface TicketTechnician {
     department: string | null;
 }
 
+/** Destino da alteração de status (CHA-07). Calculado no backend, que revalida ao gravar. */
+export interface TicketStatusTarget {
+    /** Valor técnico enviado ao servidor. */
+    value: string;
+    label: TicketStatus;
+    /** Efeito da transição, quando conhecido. */
+    description: string | null;
+}
+
+/** Alteração de status (CHA-07), enviada somente a quem tem `tickets.change_status`. */
+export interface TicketStatusChange {
+    /** Valor técnico do status atual, reenviado para detectar alterações concorrentes. */
+    current: string;
+    /** Vazio quando não há transição executável no estado atual. */
+    targets: TicketStatusTarget[];
+}
+
 /** Evento de auditoria (RF-19), enviado somente a quem tem `audit.view`. */
 export interface TicketHistoryItem {
     id: number;

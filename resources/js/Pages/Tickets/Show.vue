@@ -19,12 +19,14 @@ import TimelineItem from '@/Components/TimelineItem.vue';
 import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AssignTechnicianModal from '@/Pages/Tickets/Partials/AssignTechnicianModal.vue';
+import ChangeStatusModal from '@/Pages/Tickets/Partials/ChangeStatusModal.vue';
 import SelfAssignModal from '@/Pages/Tickets/Partials/SelfAssignModal.vue';
 import {
     formatDateTime,
     type TicketCommentItem,
     type TicketDetail,
     type TicketHistoryItem,
+    type TicketStatusChange,
     type TicketTechnician,
     type TicketSlaIndicator,
 } from '@/lib/ticket';
@@ -42,9 +44,12 @@ const props = defineProps<{
         assign: boolean;
         reassign: boolean;
         selfAssign: boolean;
+        changeStatus: boolean;
     };
     /** `null`: o usuário não gerencia atribuições. */
     assignment: { current: TicketTechnician | null } | null;
+    /** `null`: o usuário não altera status (`tickets.change_status`). */
+    statusChange: TicketStatusChange | null;
     /** Recarga parcial: só existe depois que o modal de atribuição pede a lista. */
     assignableTechnicians?: TicketTechnician[];
     limits: { comment: number };
@@ -69,6 +74,10 @@ const assignmentAllowed = computed(() => (props.assignment?.current ? props.can.
 const selfAssignNumber = ref<string | null>(null);
 /** Recusa vinda do servidor (chamado deixou de estar disponível). */
 const selfAssignError = computed(() => (page.props.errors as Record<string, string | undefined>).self_assign);
+
+/* ---------- Alteração de status (CHA-07) ---------- */
+
+const statusOpen = ref(false);
 
 /* ---------- SLA ---------- */
 
@@ -179,9 +188,12 @@ const commentCount = computed(() =>
                         </p>
                     </div>
                     <!-- Somente ações implementadas e autorizadas; as do ciclo de vida virão com seus fluxos -->
-                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign" class="flex shrink-0 flex-wrap gap-2">
+                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign || can.changeStatus" class="flex shrink-0 flex-wrap gap-2">
                         <Button v-if="can.selfAssign" @click="selfAssignNumber = ticket.number">
                             <Icon name="check" :size="16" /> Assumir chamado
+                        </Button>
+                        <Button v-if="can.changeStatus && statusChange" variant="secondary" @click="statusOpen = true">
+                            <Icon name="chevron-right" :size="16" /> Alterar status
                         </Button>
                         <Button v-if="can.assign || can.reassign" variant="secondary" @click="assignOpen = true">
                             <Icon name="user" :size="16" /> {{ can.reassign ? 'Reatribuir técnico' : 'Atribuir técnico' }}
@@ -359,7 +371,7 @@ const commentCount = computed(() =>
                             v-else-if="history.length === 0"
                             icon="clock"
                             title="Nenhuma alteração registrada"
-                            description="Mudanças de prioridade, categoria e departamento aparecerão aqui."
+                            description="Mudanças de status, responsável, prioridade, categoria e departamento aparecerão aqui."
                         />
                         <Timeline v-else>
                             <TimelineItem
@@ -386,6 +398,13 @@ const commentCount = computed(() =>
             :technicians="assignableTechnicians"
             :allowed="assignmentAllowed"
             @close="assignOpen = false"
+        />
+        <ChangeStatusModal
+            v-if="statusChange"
+            :show="statusOpen"
+            :ticket="ticket"
+            :status-change="statusChange"
+            @close="statusOpen = false"
         />
         <SelfAssignModal :number="selfAssignNumber" @close="selfAssignNumber = null" />
     </AuthenticatedLayout>

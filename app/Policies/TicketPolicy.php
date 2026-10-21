@@ -109,6 +109,36 @@ class TicketPolicy
         return $ticket->status === TicketStatus::Open && $ticket->assigned_to === null;
     }
 
+    /**
+     * Alteração de status (CHA-07, RF-10): `tickets.change_status`, acesso ao chamado e uma
+     * transição executável no estado atual; com `$target`, aquela transição específica.
+     * Visibilidade global não basta (RN-03). A action confere de novo sobre o estado bloqueado.
+     */
+    public function changeStatus(User $user, Ticket $ticket, ?TicketStatus $target = null): bool
+    {
+        $targets = self::statusChangeTargets($ticket);
+
+        return ($target === null ? $targets !== [] : in_array($target, $targets, true))
+            && $user->hasPermission('tickets.change_status')
+            && $this->view($user, $ticket);
+    }
+
+    /**
+     * Destinos da alteração de status para o chamado no estado atual. Aberto → Em atendimento
+     * exige um responsável: sem ele, o caminho é a autoatribuição (RF-09) ou a atribuição (RF-08),
+     * para que nenhum chamado fique "Em atendimento" sem quem o atenda.
+     *
+     * @return list<TicketStatus>
+     */
+    public static function statusChangeTargets(Ticket $ticket): array
+    {
+        if ($ticket->status === TicketStatus::Open && $ticket->assigned_to === null) {
+            return [];
+        }
+
+        return $ticket->status->statusChangeTargets();
+    }
+
     private function canEditAttribute(User $user, Ticket $ticket, string $permission): bool
     {
         return $user->hasPermission($permission)

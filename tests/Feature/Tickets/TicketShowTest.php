@@ -62,9 +62,10 @@ test('the requester sees the ticket with only the data the page needs', function
             ->where('history', null)
             ->where('can', [
                 'comment' => true, 'addInternalNote' => false, 'update' => false,
-                'assign' => false, 'reassign' => false, 'selfAssign' => false,
+                'assign' => false, 'reassign' => false, 'selfAssign' => false, 'changeStatus' => false,
             ])
             ->where('assignment', null)
+            ->where('statusChange', null)
             ->missing('assignableTechnicians'));
 });
 

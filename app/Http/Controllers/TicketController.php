@@ -188,6 +188,8 @@ class TicketController extends Controller
         $canReassign = $user->can('reassign', $ticket);
         // Independe do estado: após um conflito, o modal ainda mostra o responsável que venceu.
         $managesAssignment = $user->hasPermission('tickets.assign') || $user->hasPermission('tickets.reassign');
+        // Idem para a alteração de status (CHA-07): após um conflito, o modal mostra o status que venceu.
+        $managesStatus = $user->hasPermission('tickets.change_status');
 
         $comments = $ticket->comments()
             ->visibleTo($user)
@@ -240,7 +242,17 @@ class TicketController extends Controller
                 'assign' => $canAssign,
                 'reassign' => $canReassign,
                 'selfAssign' => $user->can('selfAssign', $ticket),
+                'changeStatus' => $user->can('changeStatus', $ticket),
             ],
+            // Status atual e destinos permitidos (CHA-07); só a quem pode alterar status.
+            'statusChange' => $managesStatus ? [
+                'current' => $ticket->status->value,
+                'targets' => array_map(fn (TicketStatus $target) => [
+                    'value' => $target->value,
+                    'label' => $target->label(),
+                    'description' => $this->statusChangeDescription($ticket->status, $target),
+                ], TicketPolicy::statusChangeTargets($ticket)),
+            ] : null,
             // Responsável atual para o modal de atribuição (CHA-05); só a quem pode operá-lo.
             'assignment' => $managesAssignment ? [
                 'current' => $ticket->assignee ? [
@@ -265,6 +277,16 @@ class TicketController extends Controller
                 : []),
             'limits' => ['comment' => TicketComment::BODY_MAX_LENGTH],
         ]);
+    }
+
+    /** Efeito de uma transição da CHA-07, conforme o RF-10 e o RF-15.2. */
+    private function statusChangeDescription(TicketStatus $from, TicketStatus $to): ?string
+    {
+        return match (true) {
+            $from === TicketStatus::Open && $to === TicketStatus::InProgress => 'Indica que o responsável atual iniciou o atendimento. O responsável não é alterado.',
+            in_array($from, TicketStatus::paused(), true) && $to === TicketStatus::InProgress => 'O atendimento é retomado e o SLA de resolução deixa de ficar pausado.',
+            default => null,
+        };
     }
 
     /** Eventos registrados do chamado, em ordem cronológica. Nada é derivado do estado atual. */
