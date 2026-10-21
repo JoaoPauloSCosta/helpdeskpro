@@ -1,0 +1,123 @@
+<script setup lang="ts">
+import Button from '@/Components/Button.vue';
+import FormField from '@/Components/FormField.vue';
+import IconInput from '@/Components/IconInput.vue';
+import AuthLayout from '@/Layouts/AuthLayout.vue';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+
+const form = useForm({
+    name: '',
+    email: '',
+    password: '',
+    password_confirmation: '',
+});
+
+const submit = () => {
+    form.post(route('register'), {
+        onFinish: () => {
+            form.reset('password', 'password_confirmation');
+        },
+    });
+};
+</script>
+
+<template>
+    <AuthLayout security-note="Seus dados são tratados com segurança">
+        <Head title="Cadastre-se" />
+
+        <p class="mb-2.5 text-xs font-bold uppercase tracking-widest text-primary-600">
+            Comece agora
+        </p>
+        <h2 class="mb-2 text-3xl font-bold tracking-tight text-neutral-900">
+            Crie sua conta
+        </h2>
+        <p class="mb-8 text-sm text-neutral-500">
+            Preencha os dados abaixo para solicitar seu acesso.
+        </p>
+
+        <form class="space-y-4" novalidate @submit.prevent="submit">
+            <FormField label="Nome do usuário" :error="form.errors.name" v-slot="{ id, describedby, invalid }">
+                <IconInput
+                    :id="id"
+                    v-model="form.name"
+                    icon="user"
+                    type="text"
+                    placeholder="Como podemos chamar você?"
+                    autocomplete="name"
+                    required
+                    autofocus
+                    :invalid="invalid"
+                    :aria-describedby="describedby"
+                />
+            </FormField>
+
+            <FormField label="E-mail" :error="form.errors.email" v-slot="{ id, describedby, invalid }">
+                <IconInput
+                    :id="id"
+                    v-model="form.email"
+                    icon="envelope"
+                    type="email"
+                    placeholder="voce@empresa.com.br"
+                    autocomplete="username"
+                    required
+                    :invalid="invalid"
+                    :aria-describedby="describedby"
+                />
+            </FormField>
+
+            <FormField
+                label="Senha"
+                help="Use pelo menos 8 caracteres."
+                :error="form.errors.password"
+                v-slot="{ id, describedby, invalid }"
+            >
+                <IconInput
+                    :id="id"
+                    v-model="form.password"
+                    icon="lock"
+                    type="password"
+                    placeholder="Crie uma senha"
+                    autocomplete="new-password"
+                    minlength="8"
+                    required
+                    :invalid="invalid"
+                    :aria-describedby="describedby"
+                />
+            </FormField>
+
+            <FormField
+                label="Confirmar senha"
+                :error="form.errors.password_confirmation"
+                v-slot="{ id, describedby, invalid }"
+            >
+                <IconInput
+                    :id="id"
+                    v-model="form.password_confirmation"
+                    icon="lock"
+                    type="password"
+                    placeholder="Repita a senha"
+                    autocomplete="new-password"
+                    required
+                    :invalid="invalid"
+                    :aria-describedby="describedby"
+                />
+            </FormField>
+
+            <div class="pt-2">
+                <Button type="submit" size="lg" block :loading="form.processing">
+                    Criar conta
+                </Button>
+            </div>
+        </form>
+
+        <p class="mt-6 text-center text-sm text-neutral-500">
+            Já tem uma conta?
+            <Link
+                :href="route('login')"
+                class="ms-1 rounded-md font-semibold text-primary-600 hover:text-primary-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            >
+                Voltar para o login
+            </Link>
+        </p>
+    </AuthLayout>
+</template>
