@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import BrandMark from '@/Components/BrandMark.vue';
 import Icon from '@/Components/Icon.vue';
-import { navigation, resolveRoute } from '@/lib/navigation';
+import { isCurrent, navigation, resolveRoute } from '@/lib/navigation';
 
 const page = usePage();
 
@@ -15,7 +15,7 @@ const items = computed(() =>
         .map(({ item, target }) => ({
             ...item,
             href: route(target!),
-            current: page.url !== undefined && route().current(item.active ?? target!),
+            current: page.url !== undefined && isCurrent(item, target!),
         })),
 );
 </script>

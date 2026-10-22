@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
-import { adminSections, isAvailable } from '@/lib/navigation';
+import { adminSections, isAvailable, isCurrent } from '@/lib/navigation';
 
 const page = usePage();
 
@@ -12,7 +12,7 @@ const sections = computed(() =>
         .map((section) => ({
             ...section,
             href: route(section.route!),
-            current: page.url !== undefined && route().current(section.active ?? section.route!),
+            current: page.url !== undefined && isCurrent(section, section.route!),
         })),
 );
 </script>

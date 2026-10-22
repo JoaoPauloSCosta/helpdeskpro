@@ -5,8 +5,8 @@ export interface NavTarget {
     label: string;
     /** Nome da rota Laravel. Sem rota (ou rota inexistente), o destino não é exibido. */
     route?: string;
-    /** Padrão de rota (Ziggy) que marca o destino como ativo, incluindo subpáginas. */
-    active?: string;
+    /** Padrões de rota (Ziggy) que marcam o destino como ativo, incluindo subpáginas. */
+    active?: string | string[];
     /** Permissão exigida para exibir o destino. A autorização real continua no backend. */
     permission?: string;
 }
@@ -22,6 +22,13 @@ export const adminSections: NavTarget[] = [
     { label: 'Usuários', route: 'admin.users.index', active: 'admin.users.*', permission: 'users.manage' },
     { label: 'Departamentos', route: 'admin.departments.index', active: 'admin.departments.*', permission: 'departments.manage' },
     { label: 'Categorias', route: 'admin.categories.index', active: 'admin.categories.*', permission: 'categories.manage' },
+    {
+        label: 'Papéis e permissões',
+        route: 'admin.roles.index',
+        // Inclui o catálogo de permissões (PER-05), que pertence à mesma seção.
+        active: ['admin.roles.*', 'admin.permissions.*'],
+        permission: 'roles.manage',
+    },
 ];
 
 /**
@@ -38,6 +45,10 @@ export const navigation: NavItem[] = [
     { label: 'Auditoria', icon: 'shield-check' },
     { label: 'Minha conta', icon: 'user', route: 'profile.edit', active: 'profile.*' },
 ];
+
+/** Se a página atual corresponde a algum dos padrões do destino. */
+export const isCurrent = (target: NavTarget, fallback: string): boolean =>
+    ([] as string[]).concat(target.active ?? fallback).some((pattern) => route().current(pattern));
 
 export const isAvailable = (target: NavTarget, permissions: string[]): boolean =>
     !!target.route && route().has(target.route) && (!target.permission || permissions.includes(target.permission));

@@ -2,7 +2,10 @@
 
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\TicketAssignmentController;
 use App\Http\Controllers\TicketAuditController;
 use App\Http\Controllers\TicketClosingController;
@@ -80,6 +83,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/admin/categories', [CategoryController::class, 'store'])->name('admin.categories.store');
     Route::get('/admin/categories/{category}/edit', [CategoryController::class, 'edit'])->whereNumber('category')->name('admin.categories.edit');
     Route::patch('/admin/categories/{category}', [CategoryController::class, 'update'])->whereNumber('category')->name('admin.categories.update');
+    // PER-01 a PER-03: autorizadas por `roles.manage` no controller e nos form requests.
+    // Na edição, o papel é buscado só depois da autorização geral, como nas demais.
+    Route::get('/admin/roles', [RoleController::class, 'index'])->name('admin.roles.index');
+    Route::get('/admin/roles/create', [RoleController::class, 'create'])->name('admin.roles.create');
+    Route::post('/admin/roles', [RoleController::class, 'store'])->name('admin.roles.store');
+    Route::get('/admin/roles/{role}/edit', [RoleController::class, 'edit'])->whereNumber('role')->name('admin.roles.edit');
+    Route::patch('/admin/roles/{role}', [RoleController::class, 'update'])->whereNumber('role')->name('admin.roles.update');
+    // PER-04: consulta com `roles.manage`; gravação também exige RolePolicy::managePermissions().
+    Route::get('/admin/roles/permissions', [RolePermissionController::class, 'edit'])->name('admin.roles.permissions.edit');
+    Route::put('/admin/roles/{role}/permissions', [RolePermissionController::class, 'update'])->whereNumber('role')->name('admin.roles.permissions.update');
+    // PER-05: somente consulta, com `roles.manage`. Os detalhes abrem na própria listagem (`?selected=`).
+    Route::get('/admin/permissions', [PermissionController::class, 'index'])->name('admin.permissions.index');
 });
 
 Route::middleware('auth')->group(function () {
