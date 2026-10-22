@@ -6,6 +6,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\SlaPolicyController;
 use App\Http\Controllers\TicketAssignmentController;
 use App\Http\Controllers\TicketAuditController;
 use App\Http\Controllers\TicketClosingController;
@@ -95,6 +96,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/admin/roles/{role}/permissions', [RolePermissionController::class, 'update'])->whereNumber('role')->name('admin.roles.permissions.update');
     // PER-05: somente consulta, com `roles.manage`. Os detalhes abrem na própria listagem (`?selected=`).
     Route::get('/admin/permissions', [PermissionController::class, 'index'])->name('admin.permissions.index');
+
+    // SLA-01 a SLA-04: autorizadas por `sla.manage` no controller e nos form requests.
+    // Nos detalhes e na edição, a política é buscada só depois da autorização geral.
+    Route::get('/sla-policies', [SlaPolicyController::class, 'index'])->name('sla-policies.index');
+    Route::get('/sla-policies/create', [SlaPolicyController::class, 'create'])->name('sla-policies.create');
+    Route::post('/sla-policies', [SlaPolicyController::class, 'store'])->name('sla-policies.store');
+    // Definida depois de /sla-policies/create e restrita a números, para "create" não ser lido como identificador.
+    Route::get('/sla-policies/{policy}', [SlaPolicyController::class, 'show'])->whereNumber('policy')->name('sla-policies.show');
+    Route::get('/sla-policies/{policy}/edit', [SlaPolicyController::class, 'edit'])->whereNumber('policy')->name('sla-policies.edit');
+    Route::patch('/sla-policies/{policy}', [SlaPolicyController::class, 'update'])->whereNumber('policy')->name('sla-policies.update');
 });
 
 Route::middleware('auth')->group(function () {
