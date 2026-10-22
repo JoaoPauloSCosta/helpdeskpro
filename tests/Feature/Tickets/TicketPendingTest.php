@@ -576,8 +576,8 @@ test('the active pending is shown to the support team only', function () {
             ->where('activePending.supplier_name', 'Fornecedor XPTO')
             ->where('activePending.expected_return_at', now()->addDay()->toDateString())
             ->where('activePending.author', 'Carlos Lima')
-            // Sem `audit.view`, o técnico não recebe o histórico.
-            ->where('history', null));
+            // Sem `audit.view`, o técnico não consulta o histórico de auditoria.
+            ->where('can.viewAudit', false));
 
     $this->actingAs($this->requester)
         ->get("/tickets/{$this->ticket->ticket_number}")
@@ -589,15 +589,16 @@ test('the active pending is shown to the support team only', function () {
 test('the pending appears in the history and the listing', function () {
     postPending($this->tech, $this->ticket, ['pause_status' => 'awaiting_requester'])->assertSessionHasNoErrors();
 
-    $this->actingAs($this->manager)
-        ->get("/tickets/{$this->ticket->ticket_number}")
-        ->assertInertia(fn (Assert $page) => $page
-            ->has('history', 1)
-            ->where('history.0.title', 'Pendência registrada')
-            ->where('history.0.from', 'Em atendimento')
-            ->where('history.0.to', 'Aguardando solicitante')
-            ->where('history.0.reason', 'Aguardando janela de manutenção do servidor.')
-            ->where('history.0.author', 'Carlos Lima'));
+    $events = $this->actingAs($this->manager)
+        ->getJson("/tickets/{$this->ticket->ticket_number}/audit")
+        ->assertOk()
+        ->json('events');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['title'])->toBe('Pendência registrada')
+        ->and($events[0]['changes'])->toBe([['field' => 'Status', 'from' => 'Em atendimento', 'to' => 'Aguardando solicitante']])
+        ->and(collect($events[0]['details'])->firstWhere('label', 'Motivo')['value'])->toBe('Aguardando janela de manutenção do servidor.')
+        ->and($events[0]['author'])->toBe('Carlos Lima');
 
     $row = collect($this->actingAs($this->tech)->get('/tickets')->viewData('page')['props']['tickets']['data'])
         ->firstWhere('number', $this->ticket->ticket_number);

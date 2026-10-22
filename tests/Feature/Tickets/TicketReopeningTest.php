@@ -485,18 +485,19 @@ test('the justification is shown on the ticket and in the history after reopenin
                 ]));
     }
 
-    // Auditoria (`audit.view`): o gestor vê a resolução original e a reabertura.
-    $this->actingAs($this->manager)
-        ->get("/tickets/{$this->ticket->ticket_number}")
-        ->assertInertia(fn (Assert $page) => $page
-            ->has('history', 2)
-            ->where('history.0.title', 'Chamado resolvido')
-            ->where('history.0.summary', REOPEN_SOLUTION)
-            ->where('history.1.title', 'Chamado reaberto')
-            ->where('history.1.from', 'Resolvido')
-            ->where('history.1.to', 'Aberto')
-            ->where('history.1.justification', REOPEN_JUSTIFICATION)
-            ->where('history.1.author', 'Ana Souza'));
+    // Auditoria (`audit.view`, CHA-14): o gestor vê a resolução original e a reabertura.
+    $events = $this->actingAs($this->manager)
+        ->getJson("/tickets/{$this->ticket->ticket_number}/audit")
+        ->assertOk()
+        ->json('events');
+
+    expect($events)->toHaveCount(2)
+        ->and($events[0]['title'])->toBe('Chamado resolvido')
+        ->and(collect($events[0]['details'])->firstWhere('label', 'Solução registrada')['value'])->toBe(REOPEN_SOLUTION)
+        ->and($events[1]['title'])->toBe('Chamado reaberto')
+        ->and($events[1]['changes'])->toBe([['field' => 'Status', 'from' => 'Resolvido', 'to' => 'Aberto']])
+        ->and(collect($events[1]['details'])->firstWhere('label', 'Justificativa')['value'])->toBe(REOPEN_JUSTIFICATION)
+        ->and($events[1]['author'])->toBe('Ana Souza');
 
     $row = collect($this->actingAs($this->requester)->get('/tickets')->viewData('page')['props']['tickets']['data'])
         ->firstWhere('number', $this->ticket->ticket_number);

@@ -2,8 +2,11 @@
 
 namespace App\Actions\Tickets;
 
+use App\Enums\TicketEvent;
 use App\Enums\TicketStatus;
+use App\Models\Department;
 use App\Models\Ticket;
+use App\Models\TicketCategory;
 use App\Models\User;
 use App\Support\TicketNumberGenerator;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -11,10 +14,11 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Abertura de chamado (RF-05). Autor, departamento histórico, status inicial e identificador
- * são definidos aqui, nunca a partir dos dados enviados pelo navegador.
+ * são definidos aqui, nunca a partir dos dados enviados pelo navegador. O chamado e o evento de
+ * auditoria da criação (RF-19) são gravados juntos ou não são gravados.
  *
- * Pendências de outras etapas: o evento de auditoria (Etapa 6, `ticket_histories`) e o cálculo
- * dos prazos de SLA (Etapa 7, `sla_policies`) ainda não existem; os prazos ficam nulos.
+ * Pendência de outra etapa: o cálculo dos prazos de SLA (Etapa 7, `sla_policies`) ainda não
+ * existe; os prazos ficam nulos.
  */
 class OpenTicket
 {
@@ -39,8 +43,11 @@ class OpenTicket
             ]);
 
             try {
-                // A transação já delimita a operação para quando auditoria e SLA forem gravados junto.
-                DB::transaction(fn () => $ticket->save());
+                // A transação também delimitará a gravação dos prazos de SLA quando o motor existir.
+                DB::transaction(function () use ($ticket, $requester) {
+                    $ticket->save();
+                    $this->recordCreation($ticket, $requester);
+                });
 
                 return $ticket;
             } catch (UniqueConstraintViolationException) {
@@ -49,5 +56,27 @@ class OpenTicket
         }
 
         throw new TicketNumberUnavailable;
+    }
+
+    /**
+     * Valores iniciais do chamado. Guarda também os nomes, para o histórico continuar legível se o
+     * cadastro for renomeado. A descrição fica no próprio chamado e não é copiada para a auditoria.
+     */
+    private function recordCreation(Ticket $ticket, User $requester): void
+    {
+        $ticket->histories()->forceCreate([
+            'user_id' => $requester->id,
+            'event_type' => TicketEvent::Created,
+            'old_values' => null,
+            'new_values' => [
+                'status' => $ticket->status->value,
+                'label' => $ticket->status->label(),
+                'title' => $ticket->title,
+                'priority' => ['priority' => $ticket->priority->value, 'label' => $ticket->priority->label()],
+                'category' => ['id' => $ticket->category_id, 'label' => TicketCategory::whereKey($ticket->category_id)->value('name')],
+                'department' => ['id' => $ticket->department_id, 'label' => Department::whereKey($ticket->department_id)->value('name')],
+            ],
+            'created_at' => $ticket->created_at,
+        ]);
     }
 }

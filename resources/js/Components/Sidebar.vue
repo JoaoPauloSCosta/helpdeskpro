@@ -3,17 +3,20 @@ import { computed } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import BrandMark from '@/Components/BrandMark.vue';
 import Icon from '@/Components/Icon.vue';
-import { isAvailable, navigation } from '@/lib/navigation';
+import { navigation, resolveRoute } from '@/lib/navigation';
 
 const page = usePage();
 
 // Depende de page.url para recalcular a cada navegação.
 const items = computed(() =>
-    navigation.filter(isAvailable).map((item) => ({
-        ...item,
-        href: route(item.route!),
-        current: page.url !== undefined && route().current(item.active ?? item.route!),
-    })),
+    navigation
+        .map((item) => ({ item, target: resolveRoute(item, page.props.auth.permissions) }))
+        .filter(({ target }) => target !== null)
+        .map(({ item, target }) => ({
+            ...item,
+            href: route(target!),
+            current: page.url !== undefined && route().current(item.active ?? target!),
+        })),
 );
 </script>
 

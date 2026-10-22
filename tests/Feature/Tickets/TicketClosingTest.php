@@ -441,17 +441,18 @@ test('after closing, the page shows the final status, the closure and the preser
                 ->where('can.comment', false));
     }
 
-    // Auditoria (`audit.view`): o gestor vê a resolução e o encerramento, em ordem.
-    $this->actingAs($this->manager)
-        ->get("/tickets/{$this->ticket->ticket_number}")
-        ->assertInertia(fn (Assert $page) => $page
-            ->has('history', 2)
-            ->where('history.0.title', 'Chamado resolvido')
-            ->where('history.0.summary', CLOSE_SOLUTION)
-            ->where('history.1.title', 'Chamado encerrado')
-            ->where('history.1.from', 'Resolvido')
-            ->where('history.1.to', 'Encerrado')
-            ->where('history.1.author', 'Marina Souza'));
+    // Auditoria (`audit.view`, CHA-14): o gestor vê a resolução e o encerramento, em ordem.
+    $events = $this->actingAs($this->manager)
+        ->getJson("/tickets/{$this->ticket->ticket_number}/audit")
+        ->assertOk()
+        ->json('events');
+
+    expect($events)->toHaveCount(2)
+        ->and($events[0]['title'])->toBe('Chamado resolvido')
+        ->and(collect($events[0]['details'])->firstWhere('label', 'Solução registrada')['value'])->toBe(CLOSE_SOLUTION)
+        ->and($events[1]['title'])->toBe('Chamado encerrado')
+        ->and($events[1]['changes'])->toBe([['field' => 'Status', 'from' => 'Resolvido', 'to' => 'Encerrado']])
+        ->and($events[1]['author'])->toBe('Marina Souza');
 
     $row = collect($this->actingAs($this->requester)->get('/tickets')->viewData('page')['props']['tickets']['data'])
         ->firstWhere('number', $this->ticket->ticket_number);

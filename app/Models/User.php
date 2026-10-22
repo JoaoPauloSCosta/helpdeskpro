@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Concerns\HasAuditLogs;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,7 +14,7 @@ use Illuminate\Notifications\Notifiable;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasAuditLogs, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -74,6 +75,15 @@ class User extends Authenticatable
             ->whereHas('role.permissions', fn (Builder $query) => $query->where('slug', 'tickets.self_assign'));
     }
 
+    /**
+     * Assinatura dos dados administrativos editáveis na ADM-03. Detecta se outra pessoa alterou o
+     * cadastro enquanto o formulário estava aberto, sem depender de `updated_at` (precisão de segundos).
+     */
+    public function editVersion(): string
+    {
+        return sha1(implode('|', [$this->name, $this->email, $this->role_id, $this->department_id, (int) $this->is_active]));
+    }
+
     /** Mesma regra de scopeEligibleAssignees(), para um usuário já carregado. */
     public function isEligibleAssignee(): bool
     {
@@ -86,8 +96,23 @@ class User extends Authenticatable
      */
     public function hasPermission(string $slug): bool
     {
-        $this->permissionSlugs ??= $this->role?->permissions()->pluck('slug')->all() ?? [];
+        return in_array($slug, $this->permissionSlugs(), true);
+    }
 
-        return in_array($slug, $this->permissionSlugs, true);
+    /**
+     * Slugs das permissões efetivas: nenhuma para usuários inativos (RF-02).
+     * Usado pela interface para ocultar o que não está disponível; a autorização continua nas policies.
+     *
+     * @return list<string>
+     */
+    public function effectivePermissions(): array
+    {
+        return $this->is_active ? $this->permissionSlugs() : [];
+    }
+
+    /** @return list<string> */
+    private function permissionSlugs(): array
+    {
+        return $this->permissionSlugs ??= $this->role?->permissions()->pluck('slug')->all() ?? [];
     }
 }

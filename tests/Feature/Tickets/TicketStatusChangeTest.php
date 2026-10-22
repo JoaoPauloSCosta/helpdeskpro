@@ -353,12 +353,17 @@ test('the change appears in the details, the history and the listing', function 
         ->get("/tickets/{$this->ticket->ticket_number}")
         ->assertInertia(fn (Assert $page) => $page
             ->where('ticket.status', 'Em atendimento')
-            ->where('statusChange.current', 'in_progress')
-            ->has('history', 1)
-            ->where('history.0.title', 'Status alterado')
-            ->where('history.0.from', 'Aguardando solicitante')
-            ->where('history.0.to', 'Em atendimento')
-            ->where('history.0.author', 'Carlos Lima'));
+            ->where('statusChange.current', 'in_progress'));
+
+    $events = $this->actingAs($this->manager)
+        ->getJson("/tickets/{$this->ticket->ticket_number}/audit")
+        ->assertOk()
+        ->json('events');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['title'])->toBe('Status alterado')
+        ->and($events[0]['changes'])->toBe([['field' => 'Status', 'from' => 'Aguardando solicitante', 'to' => 'Em atendimento']])
+        ->and($events[0]['author'])->toBe('Carlos Lima');
 
     $row = collect($this->actingAs($this->tech)->get('/tickets')->viewData('page')['props']['tickets']['data'])
         ->firstWhere('number', $this->ticket->ticket_number);

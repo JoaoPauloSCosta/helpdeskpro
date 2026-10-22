@@ -14,11 +14,10 @@ import SlaIndicator from '@/Components/SlaIndicator.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import Textarea from '@/Components/Textarea.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
-import Timeline from '@/Components/Timeline.vue';
-import TimelineItem from '@/Components/TimelineItem.vue';
 import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AssignTechnicianModal from '@/Pages/Tickets/Partials/AssignTechnicianModal.vue';
+import AuditHistory from '@/Pages/Tickets/Partials/AuditHistory.vue';
 import ChangeStatusModal from '@/Pages/Tickets/Partials/ChangeStatusModal.vue';
 import CloseModal from '@/Pages/Tickets/Partials/CloseModal.vue';
 import CommentHistoryModal from '@/Pages/Tickets/Partials/CommentHistoryModal.vue';
@@ -35,7 +34,6 @@ import {
     type TicketClosure,
     type TicketCommentItem,
     type TicketDetail,
-    type TicketHistoryItem,
     type TicketPendingRegistration,
     type TicketReopenForm,
     type TicketReopening,
@@ -50,8 +48,6 @@ const props = defineProps<{
     ticket: TicketDetail;
     sla: { firstResponse: TicketSlaIndicator; resolution: TicketSlaIndicator };
     comments: TicketCommentItem[];
-    /** `null`: o usuário não tem acesso à auditoria (`audit.view`). */
-    history: TicketHistoryItem[] | null;
     can: {
         comment: boolean;
         addInternalNote: boolean;
@@ -64,6 +60,8 @@ const props = defineProps<{
         resolve: boolean;
         reopen: boolean;
         close: boolean;
+        /** `audit.view` e acesso ao chamado (CHA-14); o histórico é carregado sob demanda. */
+        viewAudit: boolean;
     };
     /** `null`: o usuário não gerencia atribuições. */
     assignment: { current: TicketTechnician | null } | null;
@@ -485,7 +483,7 @@ const commentCount = computed(() =>
                     </Card>
                 </div>
 
-                <!-- Histórico: somente eventos gravados; nada é derivado do estado atual -->
+                <!-- Pendência em andamento e histórico de auditoria -->
                 <div class="min-w-0 space-y-6">
                     <!-- Pendência em andamento (RF-17): dados gravados pelo backend, só para a equipe -->
                     <Card v-if="activePending">
@@ -503,35 +501,8 @@ const commentCount = computed(() =>
                         </dl>
                     </Card>
 
-                    <Card title="Histórico">
-                        <EmptyState
-                            v-if="history === null"
-                            icon="lock"
-                            title="Histórico restrito"
-                            description="O histórico de alterações é exibido somente para quem tem acesso à auditoria."
-                        />
-                        <EmptyState
-                            v-else-if="history.length === 0"
-                            icon="clock"
-                            title="Nenhuma alteração registrada"
-                            description="Mudanças de status, pendências, responsável, prioridade, categoria e departamento aparecerão aqui."
-                        />
-                        <Timeline v-else>
-                            <TimelineItem
-                                v-for="event in history"
-                                :key="event.id"
-                                :title="event.title"
-                                :author="event.author ?? undefined"
-                                :date="formatDateTime(event.created_at)"
-                            >
-                                <template v-if="event.from && event.to">{{ event.from }} → {{ event.to }}</template>
-                                <template v-else-if="event.to">{{ event.to }}</template>
-                                <p v-if="event.reason" class="mt-1 whitespace-pre-line break-words">Motivo: {{ event.reason }}</p>
-                                <p v-if="event.summary" class="mt-1 whitespace-pre-line break-words">Solução: {{ event.summary }}</p>
-                                <p v-if="event.justification" class="mt-1 whitespace-pre-line break-words">Justificativa: {{ event.justification }}</p>
-                            </TimelineItem>
-                        </Timeline>
-                    </Card>
+                    <!-- Histórico de auditoria (CHA-14): somente eventos gravados, carregado sob demanda -->
+                    <AuditHistory :ticket="ticket" :allowed="can.viewAudit" />
                 </div>
             </div>
         </div>

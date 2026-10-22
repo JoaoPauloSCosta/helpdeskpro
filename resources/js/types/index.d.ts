@@ -21,11 +21,14 @@ export type PageProps<
 > = T & {
     auth: {
         user: User;
+        /** Slugs das permissões efetivas; só controla a exibição da interface. */
+        permissions: string[];
     };
     flash: {
         /** Identificador do chamado recém-aberto (CHA-02). */
         ticketCreated: string | null;
         success: string | null;
         info: string | null;
+        warning: string | null;
     };
 };

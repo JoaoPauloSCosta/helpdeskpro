@@ -87,12 +87,13 @@ test('each edit is audited once, without copying the comment content', function 
         ])
         ->and(json_encode([$event->old_values, $event->new_values]))->not->toContain('Senha');
 
-    // Na tela de detalhes, quem tem `audit.view` vê o evento uma única vez.
+    // No histórico de auditoria (CHA-14), quem tem `audit.view` vê o evento uma única vez.
     $manager = User::factory()->withRole('manager')->create();
-    $history = $this->actingAs($manager)->get("/tickets/{$this->ticket->ticket_number}")
-        ->viewData('page')['props']['history'];
+    $events = $this->actingAs($manager)->getJson("/tickets/{$this->ticket->ticket_number}/audit")
+        ->assertOk()
+        ->json('events');
 
-    expect(collect($history)->where('title', 'Comentário editado'))->toHaveCount(1);
+    expect(collect($events)->where('type', 'comment_edited'))->toHaveCount(1);
 });
 
 /* ---------- Consulta ---------- */

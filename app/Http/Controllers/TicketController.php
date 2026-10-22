@@ -15,7 +15,6 @@ use App\Models\Department;
 use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\TicketComment;
-use App\Models\TicketHistory;
 use App\Models\TicketSlaPause;
 use App\Models\User;
 use App\Policies\TicketPolicy;
@@ -248,8 +247,6 @@ class TicketController extends Controller
                 ],
             ],
             'comments' => $comments,
-            // Auditoria exige `audit.view` (RF-19); sem ela, nenhum evento é enviado.
-            'history' => $user->hasPermission('audit.view') ? $this->history($ticket) : null,
             'can' => [
                 'comment' => $user->can('comment', $ticket),
                 'addInternalNote' => $user->can('addInternalNote', $ticket),
@@ -262,6 +259,8 @@ class TicketController extends Controller
                 'resolve' => $user->can('resolve', $ticket),
                 'reopen' => $user->can('reopen', $ticket),
                 'close' => $user->can('close', $ticket),
+                // Histórico de auditoria (CHA-14): carregado sob demanda, com autorização própria.
+                'viewAudit' => $user->can('viewAudit', $ticket),
             ],
             // Status atual e limite do resumo (CHA-09); só a quem tem `tickets.resolve`.
             'resolutionForm' => $resolves ? [
@@ -462,31 +461,6 @@ class TicketController extends Controller
             'closed_at' => $ticket->closed_at?->toIso8601String(),
             'author' => $event?->author?->name,
         ];
-    }
-
-    /** Eventos registrados do chamado, em ordem cronológica. Nada é derivado do estado atual. */
-    private function history(Ticket $ticket): array
-    {
-        return $ticket->histories()
-            ->with('author:id,name')
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get()
-            ->map(fn (TicketHistory $event) => [
-                'id' => $event->id,
-                'title' => $event->event_type->label(),
-                'author' => $event->author?->name,
-                'from' => $event->old_values['label'] ?? null,
-                'to' => $event->new_values['label'] ?? null,
-                // Motivo informado no registro de pendência (CHA-08).
-                'reason' => $event->new_values['reason'] ?? null,
-                // Resumo da solução registrado na resolução (CHA-09).
-                'summary' => $event->new_values['resolution_summary'] ?? null,
-                // Justificativa informada na reabertura (CHA-10).
-                'justification' => $event->new_values['justification'] ?? null,
-                'created_at' => $event->created_at?->toIso8601String(),
-            ])
-            ->all();
     }
 
     private function applyFilters(Builder $query, array $filters, CarbonInterface $now): void

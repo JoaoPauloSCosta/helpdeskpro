@@ -470,15 +470,16 @@ test('the recorded solution is shown to everyone with access to the ticket', fun
 test('the resolution appears in the history and the listing', function () {
     postResolution($this->tech, $this->ticket)->assertSessionHasNoErrors();
 
-    $this->actingAs($this->manager)
-        ->get("/tickets/{$this->ticket->ticket_number}")
-        ->assertInertia(fn (Assert $page) => $page
-            ->has('history', 1)
-            ->where('history.0.title', 'Chamado resolvido')
-            ->where('history.0.from', 'Em atendimento')
-            ->where('history.0.to', 'Resolvido')
-            ->where('history.0.summary', SUMMARY)
-            ->where('history.0.author', 'Carlos Lima'));
+    $events = $this->actingAs($this->manager)
+        ->getJson("/tickets/{$this->ticket->ticket_number}/audit")
+        ->assertOk()
+        ->json('events');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['title'])->toBe('Chamado resolvido')
+        ->and($events[0]['changes'])->toBe([['field' => 'Status', 'from' => 'Em atendimento', 'to' => 'Resolvido']])
+        ->and(collect($events[0]['details'])->firstWhere('label', 'Solução registrada')['value'])->toBe(SUMMARY)
+        ->and($events[0]['author'])->toBe('Carlos Lima');
 
     $row = collect($this->actingAs($this->tech)->get('/tickets')->viewData('page')['props']['tickets']['data'])
         ->firstWhere('number', $this->ticket->ticket_number);

@@ -33,6 +33,8 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user(),
+                // Só controla a exibição da navegação; a autorização real fica no backend.
+                'permissions' => fn () => $request->user()?->effectivePermissions() ?? [],
             ],
             'flash' => [
                 // Identificador do chamado recém-aberto (CHA-02), exibido nos detalhes.
@@ -40,6 +42,7 @@ class HandleInertiaRequests extends Middleware
                 // Confirmações gerais, exibidas pela página de destino (ex.: edição na CHA-04).
                 'success' => fn () => $this->flashed($request, 'success'),
                 'info' => fn () => $this->flashed($request, 'info'),
+                'warning' => fn () => $this->flashed($request, 'warning'),
             ],
         ];
     }

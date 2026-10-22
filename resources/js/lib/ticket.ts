@@ -247,20 +247,44 @@ export interface TicketClosure {
     author: string | null;
 }
 
-/** Evento de auditoria (RF-19), enviado somente a quem tem `audit.view`. */
-export interface TicketHistoryItem {
-    id: number;
-    title: string;
-    author: string | null;
-    from: string | null;
+/** Campo alterado num evento de auditoria (RF-19). */
+export interface TicketAuditChange {
+    field: string;
+    /** Ausente: sem valor anterior aplicável (por exemplo, na abertura) · `null`: não foi gravado. */
+    from?: string | null;
+    /** `null`: não foi gravado. */
     to: string | null;
-    /** Motivo informado no registro de pendência. */
-    reason: string | null;
-    /** Resumo da solução informado na resolução. */
-    summary: string | null;
-    /** Justificativa informada na reabertura. */
-    justification: string | null;
+}
+
+/** Informação complementar de um evento, já filtrada pelo backend; `value` é o dado gravado. */
+export interface TicketAuditDetail {
+    label: string;
+    value: string | number;
+    /** datetime: ISO 8601 · date: AAAA-MM-DD · duration: segundos · longtext: texto livre do usuário. */
+    format: 'text' | 'longtext' | 'datetime' | 'date' | 'duration';
+}
+
+/** Evento de auditoria do chamado (CHA-14), montado pelo backend a partir do registro gravado. */
+export interface TicketAuditEvent {
+    id: number;
+    type: string;
+    title: string;
+    tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
     created_at: string | null;
+    /** `null`: evento sem usuário identificado. */
+    author: string | null;
+    description: string | null;
+    changes: TicketAuditChange[];
+    details: TicketAuditDetail[];
+    /** Há dados gravados que o usuário não pode consultar (por exemplo, o motivo da pendência). */
+    restricted: boolean;
+}
+
+/** Uma página do histórico de auditoria, em ordem cronológica (RF-19). */
+export interface TicketAuditPage {
+    ticket: string;
+    events: TicketAuditEvent[];
+    meta: { current_page: number; last_page: number; per_page: number; total: number };
 }
 
 /**

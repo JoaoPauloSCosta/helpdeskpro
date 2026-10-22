@@ -220,6 +220,15 @@ class TicketPolicy
         return $user->hasPermission('tickets.view_internal_notes') && $this->view($user, $ticket);
     }
 
+    /**
+     * Histórico de auditoria do chamado (CHA-14, RF-19): `audit.view` e acesso ao chamado. A permissão
+     * não amplia o escopo de visibilidade: quem não enxerga o chamado não consulta seus eventos.
+     */
+    public function viewAudit(User $user, Ticket $ticket): bool
+    {
+        return $user->hasPermission('audit.view') && $this->view($user, $ticket);
+    }
+
     private function canEditAttribute(User $user, Ticket $ticket, string $permission): bool
     {
         return $user->hasPermission($permission)

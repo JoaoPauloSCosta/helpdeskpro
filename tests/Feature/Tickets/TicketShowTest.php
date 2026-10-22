@@ -58,12 +58,12 @@ test('the requester sees the ticket with only the data the page needs', function
             ->has('sla.firstResponse')
             ->has('sla.resolution')
             ->has('comments', 0)
-            // Sem `audit.view`, nenhum evento de auditoria é enviado.
-            ->where('history', null)
             ->where('can', [
                 'comment' => true, 'addInternalNote' => false, 'update' => false,
                 'assign' => false, 'reassign' => false, 'selfAssign' => false, 'changeStatus' => false,
                 'registerPending' => false, 'resolve' => false, 'reopen' => false, 'close' => false,
+                // Sem `audit.view`, o histórico de auditoria (CHA-14) não é consultado.
+                'viewAudit' => false,
             ])
             ->where('assignment', null)
             ->where('statusChange', null)

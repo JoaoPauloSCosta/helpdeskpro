@@ -301,18 +301,20 @@ test('changing the priority keeps SLA deadlines, first response and violations u
 test('the history is shown only to users with audit access', function () {
     patchTicket($this->manager, $this->ticket, ['priority' => 'critical'])->assertSessionHasNoErrors();
 
-    $this->actingAs($this->manager)
-        ->get(editUrl($this->ticket))
-        ->assertInertia(fn (Assert $page) => $page
-            ->has('history', 1)
-            ->where('history.0.title', 'Prioridade alterada')
-            ->where('history.0.from', 'Média')
-            ->where('history.0.to', 'Crítica')
-            ->where('history.0.author', $this->manager->name));
+    $events = $this->actingAs($this->manager)
+        ->getJson(editUrl($this->ticket).'/audit')
+        ->assertOk()
+        ->json('events');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['title'])->toBe('Prioridade alterada')
+        ->and($events[0]['changes'])->toBe([['field' => 'Prioridade', 'from' => 'Média', 'to' => 'Crítica']])
+        ->and($events[0]['author'])->toBe($this->manager->name);
 
     foreach ([$this->requester, $this->tech] as $user) {
         $this->actingAs($user)
             ->get(editUrl($this->ticket))
-            ->assertInertia(fn (Assert $page) => $page->where('history', null));
+            ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', false));
+        $this->actingAs($user)->getJson(editUrl($this->ticket).'/audit')->assertForbidden();
     }
 });
