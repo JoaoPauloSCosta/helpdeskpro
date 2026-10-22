@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TicketAssignmentController;
@@ -72,6 +73,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/admin/departments', [DepartmentController::class, 'store'])->name('admin.departments.store');
     Route::get('/admin/departments/{department}/edit', [DepartmentController::class, 'edit'])->whereNumber('department')->name('admin.departments.edit');
     Route::patch('/admin/departments/{department}', [DepartmentController::class, 'update'])->whereNumber('department')->name('admin.departments.update');
+    // ADM-07 a ADM-09: autorizadas por `categories.manage` no controller e nos form requests.
+    // Na edição, a categoria é buscada só depois da autorização geral, como nas demais.
+    Route::get('/admin/categories', [CategoryController::class, 'index'])->name('admin.categories.index');
+    Route::get('/admin/categories/create', [CategoryController::class, 'create'])->name('admin.categories.create');
+    Route::post('/admin/categories', [CategoryController::class, 'store'])->name('admin.categories.store');
+    Route::get('/admin/categories/{category}/edit', [CategoryController::class, 'edit'])->whereNumber('category')->name('admin.categories.edit');
+    Route::patch('/admin/categories/{category}', [CategoryController::class, 'update'])->whereNumber('category')->name('admin.categories.update');
 });
 
 Route::middleware('auth')->group(function () {

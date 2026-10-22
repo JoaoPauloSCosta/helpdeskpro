@@ -21,6 +21,7 @@ export interface NavItem extends NavTarget {
 export const adminSections: NavTarget[] = [
     { label: 'Usuários', route: 'admin.users.index', active: 'admin.users.*', permission: 'users.manage' },
     { label: 'Departamentos', route: 'admin.departments.index', active: 'admin.departments.*', permission: 'departments.manage' },
+    { label: 'Categorias', route: 'admin.categories.index', active: 'admin.categories.*', permission: 'categories.manage' },
 ];
 
 /**
