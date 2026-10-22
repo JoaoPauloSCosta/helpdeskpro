@@ -63,9 +63,14 @@ test('the requester sees the ticket with only the data the page needs', function
             ->where('can', [
                 'comment' => true, 'addInternalNote' => false, 'update' => false,
                 'assign' => false, 'reassign' => false, 'selfAssign' => false, 'changeStatus' => false,
+                'registerPending' => false, 'resolve' => false,
             ])
             ->where('assignment', null)
             ->where('statusChange', null)
+            ->where('pending', null)
+            ->where('activePending', null)
+            ->where('resolutionForm', null)
+            ->where('resolution', null)
             ->missing('assignableTechnicians'));
 });
 

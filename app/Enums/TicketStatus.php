@@ -69,10 +69,45 @@ enum TicketStatus: string
      */
     public function statusChangeTargets(): array
     {
-        $targets = array_keys(array_filter(
-            $this->transitions(),
-            fn (TicketTransitionFlow $flow) => $flow === TicketTransitionFlow::StatusChange,
-        ));
+        return $this->targetsOf(TicketTransitionFlow::StatusChange);
+    }
+
+    /**
+     * Tipos de pendência que o registro de pendência (CHA-08) pode aplicar a partir deste status.
+     *
+     * @return list<self>
+     */
+    public function pendingTargets(): array
+    {
+        return $this->targetsOf(TicketTransitionFlow::Pending);
+    }
+
+    /**
+     * Campos específicos do RF-17 aceitos por este tipo de pendência, além do motivo (sempre
+     * obrigatório). Todos são opcionais; um campo de outro tipo é recusado.
+     *
+     * @return list<string>
+     */
+    public function pendingFields(): array
+    {
+        return match ($this) {
+            self::AwaitingRequester, self::Pending => ['expected_return_at'],
+            self::PendingThirdParty => ['supplier_name', 'protocol_number', 'responsible_name', 'expected_return_at'],
+            self::PendingDepartments => ['related_department_id', 'protocol_number', 'responsible_name', 'expected_return_at'],
+            default => [],
+        };
+    }
+
+    /** Se a resolução (CHA-09, RF-12) pode partir deste status. */
+    public function resolvable(): bool
+    {
+        return ($this->transitions()[self::Resolved->value] ?? null) === TicketTransitionFlow::Resolution;
+    }
+
+    /** @return list<self> */
+    private function targetsOf(TicketTransitionFlow $flow): array
+    {
+        $targets = array_keys(array_filter($this->transitions(), fn (TicketTransitionFlow $f) => $f === $flow));
 
         return array_map(fn (string $value) => self::from($value), $targets);
     }

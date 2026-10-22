@@ -5,6 +5,8 @@ use App\Http\Controllers\TicketAssignmentController;
 use App\Http\Controllers\TicketCommentController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketEditController;
+use App\Http\Controllers\TicketPendingController;
+use App\Http\Controllers\TicketResolutionController;
 use App\Http\Controllers\TicketSelfAssignmentController;
 use App\Http\Controllers\TicketStatusController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +37,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/tickets/{ticket}/assignee', [TicketAssignmentController::class, 'update'])->name('tickets.assignee.update');
     Route::post('/tickets/{ticket}/self-assignment', [TicketSelfAssignmentController::class, 'store'])->name('tickets.self-assignment.store');
     Route::put('/tickets/{ticket}/status', [TicketStatusController::class, 'update'])->name('tickets.status.update');
+    Route::post('/tickets/{ticket}/pending', [TicketPendingController::class, 'store'])->name('tickets.pending.store');
+    Route::post('/tickets/{ticket}/resolution', [TicketResolutionController::class, 'store'])->name('tickets.resolution.store');
     Route::post('/tickets/{ticket}/comments', [TicketCommentController::class, 'store'])->name('tickets.comments.store');
 });
 

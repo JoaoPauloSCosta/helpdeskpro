@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Ticket extends Model
 {
@@ -29,6 +30,9 @@ class Ticket extends Model
 
     /** `description` é TEXT (65.535 bytes): 16.383 caracteres cabem mesmo com 4 bytes cada (utf8mb4). */
     public const DESCRIPTION_MAX_LENGTH = 16383;
+
+    /** `resolution_summary` também é TEXT: mesmo limite da descrição. */
+    public const RESOLUTION_SUMMARY_MAX_LENGTH = 16383;
 
     protected function casts(): array
     {
@@ -71,6 +75,18 @@ class Ticket extends Model
     public function histories(): HasMany
     {
         return $this->hasMany(TicketHistory::class);
+    }
+
+    /** Pendências e pausas do SLA de resolução (RF-17), uma por ciclo de pausa. */
+    public function slaPauses(): HasMany
+    {
+        return $this->hasMany(TicketSlaPause::class);
+    }
+
+    /** A pausa em andamento, se houver. O banco garante no máximo uma por chamado. */
+    public function activeSlaPause(): HasOne
+    {
+        return $this->hasOne(TicketSlaPause::class)->whereNull('ended_at');
     }
 
     /**

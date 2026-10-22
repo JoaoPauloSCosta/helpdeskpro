@@ -142,6 +142,63 @@ export interface TicketStatusChange {
     targets: TicketStatusTarget[];
 }
 
+/** Campo específico do RF-17 que um tipo de pendência aceita, além do motivo. */
+export type TicketPendingField =
+    | 'supplier_name'
+    | 'protocol_number'
+    | 'related_department_id'
+    | 'responsible_name'
+    | 'expected_return_at';
+
+/** Tipo de pendência (CHA-08). Calculado no backend, que revalida ao gravar. */
+export interface TicketPendingType {
+    /** Valor técnico enviado ao servidor. */
+    value: string;
+    label: TicketStatus;
+    description: string | null;
+    /** Campos específicos aceitos por este tipo; todos opcionais. */
+    fields: TicketPendingField[];
+}
+
+/** Registro de pendência (CHA-08), enviado somente a quem tem `tickets.change_status`. */
+export interface TicketPendingRegistration {
+    /** Valor técnico do status atual, reenviado para detectar alterações concorrentes. */
+    current: string;
+    /** Vazio quando o chamado não admite pendência no estado atual. */
+    types: TicketPendingType[];
+    /** Departamentos ativos, quando algum tipo aceita departamento relacionado. */
+    departments: Option[];
+    limits: { reason: number; text: number };
+}
+
+/** Pendência em andamento (RF-17), enviada somente à equipe de suporte. */
+export interface TicketActivePending {
+    type: TicketStatus;
+    reason: string;
+    supplier_name: string | null;
+    protocol_number: string | null;
+    related_department: string | null;
+    responsible_name: string | null;
+    /** AAAA-MM-DD. */
+    expected_return_at: string | null;
+    started_at: string;
+    author: string | null;
+}
+
+/** Resolução (CHA-09), enviada somente a quem tem `tickets.resolve`. */
+export interface TicketResolutionForm {
+    /** Valor técnico do status atual, reenviado para detectar alterações concorrentes. */
+    current: string;
+    limits: { summary: number };
+}
+
+/** Solução registrada (RF-12), presente enquanto o chamado está resolvido ou encerrado. */
+export interface TicketResolution {
+    summary: string;
+    resolved_at: string | null;
+    author: string | null;
+}
+
 /** Evento de auditoria (RF-19), enviado somente a quem tem `audit.view`. */
 export interface TicketHistoryItem {
     id: number;
@@ -149,6 +206,10 @@ export interface TicketHistoryItem {
     author: string | null;
     from: string | null;
     to: string | null;
+    /** Motivo informado no registro de pendência. */
+    reason: string | null;
+    /** Resumo da solução informado na resolução. */
+    summary: string | null;
     created_at: string | null;
 }
 

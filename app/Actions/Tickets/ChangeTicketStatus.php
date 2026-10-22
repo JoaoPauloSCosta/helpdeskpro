@@ -16,9 +16,10 @@ use Illuminate\Validation\ValidationException;
  * fluxo e altera apenas `status`. O chamado e o evento de auditoria são gravados juntos ou não
  * são gravados; a linha fica bloqueada entre a verificação e a gravação.
  *
- * SLA (RF-15.2, RF-17): ainda não há registro de pausas nem motor de cálculo (Etapa 7). Na
- * retomada, o ponto de integração é aqui, na mesma transação: encerrar a pausa ativa e aplicar o
- * tempo restante. Até lá, nenhum prazo, primeira resposta ou violação gravada é alterado.
+ * SLA (RF-15.2, RF-17): na retomada, a pausa aberta pelo registro de pendência (CHA-08) é
+ * encerrada na mesma transação, com fim e duração calculados aqui. Ainda não há motor de cálculo
+ * (Etapa 7): aplicar o tempo restante ao prazo é o próximo passo neste mesmo ponto. Até lá, nenhum
+ * prazo, primeira resposta ou violação gravada é alterado.
  */
 class ChangeTicketStatus
 {
@@ -47,7 +48,14 @@ class ChangeTicketStatus
             // Permissão e acesso conferidos de novo sobre o estado bloqueado.
             Gate::forUser($editor)->authorize('changeStatus', [$current, $target]);
 
+            $now = now();
             $previous = $current->status;
+
+            // Retomada (RF-17, regra 2). Chamados pausados antes do CHA-08 não têm pausa registrada.
+            $pause = in_array($previous, TicketStatus::paused(), true)
+                ? $current->slaPauses()->active()->lockForUpdate()->first()
+                : null;
+            $pause?->close($now);
 
             $current->forceFill(['status' => $target])->save();
 
@@ -55,7 +63,17 @@ class ChangeTicketStatus
                 'user_id' => $editor->id,
                 'event_type' => TicketEvent::StatusChanged,
                 'old_values' => ['status' => $previous->value, 'label' => $previous->label()],
-                'new_values' => ['status' => $target->value, 'label' => $target->label()],
+                'new_values' => [
+                    'status' => $target->value,
+                    'label' => $target->label(),
+                    ...($pause ? ['sla_pause' => [
+                        'indicator' => 'resolution',
+                        'started_at' => $pause->started_at->toIso8601String(),
+                        'ended_at' => $pause->ended_at->toIso8601String(),
+                        'duration_seconds' => $pause->duration_seconds,
+                    ]] : []),
+                ],
+                'created_at' => $now,
             ]);
 
             $ticket->setRawAttributes($current->getAttributes(), true);

@@ -6,6 +6,7 @@ use App\Actions\Tickets\OpenTicket;
 use App\Actions\Tickets\TicketNumberUnavailable;
 use App\Enums\CommentVisibility;
 use App\Enums\SlaState;
+use App\Enums\TicketEvent;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Http\Requests\Tickets\StoreTicketRequest;
@@ -15,6 +16,7 @@ use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\TicketComment;
 use App\Models\TicketHistory;
+use App\Models\TicketSlaPause;
 use App\Models\User;
 use App\Policies\TicketPolicy;
 use Carbon\CarbonInterface;
@@ -190,6 +192,8 @@ class TicketController extends Controller
         $managesAssignment = $user->hasPermission('tickets.assign') || $user->hasPermission('tickets.reassign');
         // Idem para a alteração de status (CHA-07): após um conflito, o modal mostra o status que venceu.
         $managesStatus = $user->hasPermission('tickets.change_status');
+        // Idem para a resolução (CHA-09).
+        $resolves = $user->hasPermission('tickets.resolve');
 
         $comments = $ticket->comments()
             ->visibleTo($user)
@@ -243,7 +247,20 @@ class TicketController extends Controller
                 'reassign' => $canReassign,
                 'selfAssign' => $user->can('selfAssign', $ticket),
                 'changeStatus' => $user->can('changeStatus', $ticket),
+                'registerPending' => $user->can('registerPending', $ticket),
+                'resolve' => $user->can('resolve', $ticket),
             ],
+            // Status atual e limite do resumo (CHA-09); só a quem tem `tickets.resolve`.
+            'resolutionForm' => $resolves ? [
+                'current' => $ticket->status->value,
+                'limits' => ['summary' => Ticket::RESOLUTION_SUMMARY_MAX_LENGTH],
+            ] : null,
+            // Solução registrada (RF-12), para todos que acessam o chamado.
+            'resolution' => $this->resolution($ticket),
+            // Tipos de pendência permitidos e seus campos (CHA-08); só a quem pode alterar status.
+            'pending' => $managesStatus ? $this->pendingOptions($ticket) : null,
+            // Pendência em andamento, somente para a equipe de suporte.
+            'activePending' => $user->can('viewPendingDetails', $ticket) ? $this->activePending($ticket) : null,
             // Status atual e destinos permitidos (CHA-07); só a quem pode alterar status.
             'statusChange' => $managesStatus ? [
                 'current' => $ticket->status->value,
@@ -284,9 +301,98 @@ class TicketController extends Controller
     {
         return match (true) {
             $from === TicketStatus::Open && $to === TicketStatus::InProgress => 'Indica que o responsável atual iniciou o atendimento. O responsável não é alterado.',
-            in_array($from, TicketStatus::paused(), true) && $to === TicketStatus::InProgress => 'O atendimento é retomado e o SLA de resolução deixa de ficar pausado.',
+            in_array($from, TicketStatus::paused(), true) && $to === TicketStatus::InProgress => 'O atendimento é retomado, a pendência em andamento é encerrada e o SLA de resolução deixa de ficar pausado.',
             default => null,
         };
+    }
+
+    /**
+     * Opções do registro de pendência (CHA-08): os tipos admitidos no estado atual, com os campos
+     * específicos que cada um aceita, e os departamentos ativos quando algum tipo os usa.
+     */
+    private function pendingOptions(Ticket $ticket): array
+    {
+        $types = TicketPolicy::pendingTargets($ticket);
+        $needsDepartments = collect($types)->contains(fn (TicketStatus $type) => in_array('related_department_id', $type->pendingFields(), true));
+
+        return [
+            'current' => $ticket->status->value,
+            'types' => array_map(fn (TicketStatus $type) => [
+                'value' => $type->value,
+                'label' => $type->label(),
+                'description' => $this->pendingDescription($type),
+                'fields' => $type->pendingFields(),
+            ], $types),
+            'departments' => $needsDepartments
+                ? Department::query()
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get(['id', 'name'])
+                    ->map(fn (Department $department) => ['value' => (string) $department->id, 'label' => $department->name])
+                    ->all()
+                : [],
+            'limits' => [
+                'reason' => TicketSlaPause::REASON_MAX_LENGTH,
+                'text' => TicketSlaPause::TEXT_MAX_LENGTH,
+            ],
+        ];
+    }
+
+    /** Quando usar cada tipo de pendência. */
+    private function pendingDescription(TicketStatus $type): ?string
+    {
+        return match ($type) {
+            TicketStatus::AwaitingRequester => 'O atendimento depende de uma informação ou ação do solicitante.',
+            TicketStatus::Pending => 'O atendimento está temporariamente impedido por outro motivo.',
+            TicketStatus::PendingThirdParty => 'O atendimento depende de um fornecedor ou terceiro externo.',
+            TicketStatus::PendingDepartments => 'O atendimento depende de outro departamento ou área interna.',
+            default => null,
+        };
+    }
+
+    /** Dados registrados da pendência em andamento, se o chamado estiver pausado. */
+    private function activePending(Ticket $ticket): ?array
+    {
+        if (! in_array($ticket->status, TicketStatus::paused(), true)) {
+            return null;
+        }
+
+        $pause = $ticket->activeSlaPause()->with(['author:id,name', 'relatedDepartment:id,name'])->first();
+
+        return $pause ? [
+            'type' => $pause->pause_status->label(),
+            'reason' => $pause->reason,
+            'supplier_name' => $pause->supplier_name,
+            'protocol_number' => $pause->protocol_number,
+            'related_department' => $pause->relatedDepartment?->name,
+            'responsible_name' => $pause->responsible_name,
+            'expected_return_at' => $pause->expected_return_at?->toDateString(),
+            'started_at' => $pause->started_at->toIso8601String(),
+            'author' => $pause->author?->name,
+        ] : null;
+    }
+
+    /**
+     * Solução vigente (RF-12), enquanto o chamado está resolvido ou encerrado. O autor vem do evento
+     * de resolução: o chamado não guarda uma cópia dele. Resoluções de ciclos anteriores ficam no histórico.
+     */
+    private function resolution(Ticket $ticket): ?array
+    {
+        if (! in_array($ticket->status, TicketStatus::finished(), true) || $ticket->resolution_summary === null) {
+            return null;
+        }
+
+        $event = $ticket->histories()
+            ->where('event_type', TicketEvent::Resolved)
+            ->with('author:id,name')
+            ->latest('id')
+            ->first();
+
+        return [
+            'summary' => $ticket->resolution_summary,
+            'resolved_at' => $ticket->resolved_at?->toIso8601String(),
+            'author' => $event?->author?->name,
+        ];
     }
 
     /** Eventos registrados do chamado, em ordem cronológica. Nada é derivado do estado atual. */
@@ -303,6 +409,10 @@ class TicketController extends Controller
                 'author' => $event->author?->name,
                 'from' => $event->old_values['label'] ?? null,
                 'to' => $event->new_values['label'] ?? null,
+                // Motivo informado no registro de pendência (CHA-08).
+                'reason' => $event->new_values['reason'] ?? null,
+                // Resumo da solução registrado na resolução (CHA-09).
+                'summary' => $event->new_values['resolution_summary'] ?? null,
                 'created_at' => $event->created_at?->toIso8601String(),
             ])
             ->all();

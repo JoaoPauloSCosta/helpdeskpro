@@ -20,12 +20,19 @@ import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AssignTechnicianModal from '@/Pages/Tickets/Partials/AssignTechnicianModal.vue';
 import ChangeStatusModal from '@/Pages/Tickets/Partials/ChangeStatusModal.vue';
+import PendingModal from '@/Pages/Tickets/Partials/PendingModal.vue';
+import ResolveModal from '@/Pages/Tickets/Partials/ResolveModal.vue';
 import SelfAssignModal from '@/Pages/Tickets/Partials/SelfAssignModal.vue';
 import {
+    formatDate,
     formatDateTime,
+    type TicketActivePending,
     type TicketCommentItem,
     type TicketDetail,
     type TicketHistoryItem,
+    type TicketPendingRegistration,
+    type TicketResolution,
+    type TicketResolutionForm,
     type TicketStatusChange,
     type TicketTechnician,
     type TicketSlaIndicator,
@@ -45,11 +52,21 @@ const props = defineProps<{
         reassign: boolean;
         selfAssign: boolean;
         changeStatus: boolean;
+        registerPending: boolean;
+        resolve: boolean;
     };
     /** `null`: o usuário não gerencia atribuições. */
     assignment: { current: TicketTechnician | null } | null;
     /** `null`: o usuário não altera status (`tickets.change_status`). */
     statusChange: TicketStatusChange | null;
+    /** `null`: o usuário não registra pendências (`tickets.change_status`). */
+    pending: TicketPendingRegistration | null;
+    /** `null`: sem pendência em andamento ou usuário fora da equipe de suporte. */
+    activePending: TicketActivePending | null;
+    /** `null`: o usuário não resolve chamados (`tickets.resolve`). */
+    resolutionForm: TicketResolutionForm | null;
+    /** `null`: o chamado não está resolvido nem encerrado. */
+    resolution: TicketResolution | null;
     /** Recarga parcial: só existe depois que o modal de atribuição pede a lista. */
     assignableTechnicians?: TicketTechnician[];
     limits: { comment: number };
@@ -78,6 +95,31 @@ const selfAssignError = computed(() => (page.props.errors as Record<string, stri
 /* ---------- Alteração de status (CHA-07) ---------- */
 
 const statusOpen = ref(false);
+
+/* ---------- Registro de pendência (CHA-08) ---------- */
+
+const pendingOpen = ref(false);
+
+/* ---------- Resolução (CHA-09) ---------- */
+
+const resolveOpen = ref(false);
+
+/** [rótulo, valor] dos dados registrados da pendência em andamento; vazios são omitidos. */
+const pendingDetails = computed(() => {
+    const p = props.activePending;
+    if (!p) return [];
+    return (
+        [
+            ['Fornecedor ou terceiro', p.supplier_name],
+            ['Departamento aguardado', p.related_department],
+            ['Protocolo externo', p.protocol_number],
+            ['Responsável externo ou contato', p.responsible_name],
+            ['Previsão de retorno', p.expected_return_at && formatDate(p.expected_return_at)],
+            ['Registrada por', p.author],
+            ['Início da pausa', formatDateTime(p.started_at)],
+        ] as [string, string | null][]
+    ).filter(([, value]) => value);
+});
 
 /* ---------- SLA ---------- */
 
@@ -188,12 +230,18 @@ const commentCount = computed(() =>
                         </p>
                     </div>
                     <!-- Somente ações implementadas e autorizadas; as do ciclo de vida virão com seus fluxos -->
-                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign || can.changeStatus" class="flex shrink-0 flex-wrap gap-2">
+                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign || can.changeStatus || can.registerPending || can.resolve" class="flex shrink-0 flex-wrap gap-2">
                         <Button v-if="can.selfAssign" @click="selfAssignNumber = ticket.number">
                             <Icon name="check" :size="16" /> Assumir chamado
                         </Button>
+                        <Button v-if="can.resolve && resolutionForm" @click="resolveOpen = true">
+                            <Icon name="check-circle" :size="16" /> Resolver chamado
+                        </Button>
                         <Button v-if="can.changeStatus && statusChange" variant="secondary" @click="statusOpen = true">
                             <Icon name="chevron-right" :size="16" /> Alterar status
+                        </Button>
+                        <Button v-if="can.registerPending && pending" variant="secondary" @click="pendingOpen = true">
+                            <Icon name="pause" :size="16" /> Registrar pendência
                         </Button>
                         <Button v-if="can.assign || can.reassign" variant="secondary" @click="assignOpen = true">
                             <Icon name="user" :size="16" /> {{ can.reassign ? 'Reatribuir técnico' : 'Atribuir técnico' }}
@@ -266,6 +314,19 @@ const commentCount = computed(() =>
                                 <dd class="mt-1"><StatusBadge :status="ticket.status" /></dd>
                             </div>
                         </dl>
+                    </Card>
+
+                    <!-- Solução registrada (RF-12): texto gravado pelo backend, sempre como texto -->
+                    <Card v-if="resolution">
+                        <template #header>
+                            <h2 class="text-lg font-semibold text-neutral-900">Solução</h2>
+                            <StatusBadge status="Resolvido" />
+                        </template>
+                        <p class="whitespace-pre-line break-words text-sm text-neutral-900">{{ resolution.summary }}</p>
+                        <p class="mt-4 border-t border-neutral-200 pt-4 text-xs text-neutral-600">
+                            Resolvido<template v-if="resolution.author"> por <span class="font-medium text-neutral-900">{{ resolution.author }}</span></template>
+                            em {{ formatDateTime(resolution.resolved_at) }}
+                        </p>
                     </Card>
 
                     <!-- Interações -->
@@ -359,7 +420,23 @@ const commentCount = computed(() =>
                 </div>
 
                 <!-- Histórico: somente eventos gravados; nada é derivado do estado atual -->
-                <div class="min-w-0">
+                <div class="min-w-0 space-y-6">
+                    <!-- Pendência em andamento (RF-17): dados gravados pelo backend, só para a equipe -->
+                    <Card v-if="activePending">
+                        <template #header>
+                            <h2 class="text-lg font-semibold text-neutral-900">Pendência em andamento</h2>
+                            <StatusBadge :status="activePending.type" />
+                        </template>
+                        <p class="text-xs font-medium text-neutral-500">Motivo</p>
+                        <p class="mt-0.5 whitespace-pre-line break-words text-sm text-neutral-900">{{ activePending.reason }}</p>
+                        <dl class="mt-4 space-y-3 border-t border-neutral-200 pt-4 text-sm">
+                            <div v-for="[label, value] in pendingDetails" :key="label" class="min-w-0">
+                                <dt class="text-xs font-medium text-neutral-500">{{ label }}</dt>
+                                <dd class="mt-0.5 break-words text-neutral-900">{{ value }}</dd>
+                            </div>
+                        </dl>
+                    </Card>
+
                     <Card title="Histórico">
                         <EmptyState
                             v-if="history === null"
@@ -371,7 +448,7 @@ const commentCount = computed(() =>
                             v-else-if="history.length === 0"
                             icon="clock"
                             title="Nenhuma alteração registrada"
-                            description="Mudanças de status, responsável, prioridade, categoria e departamento aparecerão aqui."
+                            description="Mudanças de status, pendências, responsável, prioridade, categoria e departamento aparecerão aqui."
                         />
                         <Timeline v-else>
                             <TimelineItem
@@ -383,6 +460,8 @@ const commentCount = computed(() =>
                             >
                                 <template v-if="event.from && event.to">{{ event.from }} → {{ event.to }}</template>
                                 <template v-else-if="event.to">{{ event.to }}</template>
+                                <p v-if="event.reason" class="mt-1 whitespace-pre-line break-words">Motivo: {{ event.reason }}</p>
+                                <p v-if="event.summary" class="mt-1 whitespace-pre-line break-words">Solução: {{ event.summary }}</p>
                             </TimelineItem>
                         </Timeline>
                     </Card>
@@ -405,6 +484,21 @@ const commentCount = computed(() =>
             :ticket="ticket"
             :status-change="statusChange"
             @close="statusOpen = false"
+        />
+        <PendingModal
+            v-if="pending"
+            :show="pendingOpen"
+            :ticket="ticket"
+            :pending="pending"
+            @close="pendingOpen = false"
+        />
+        <ResolveModal
+            v-if="resolutionForm"
+            :show="resolveOpen"
+            :ticket="ticket"
+            :resolution="resolutionForm"
+            :allowed="can.resolve"
+            @close="resolveOpen = false"
         />
         <SelfAssignModal :number="selfAssignNumber" @close="selfAssignNumber = null" />
     </AuthenticatedLayout>

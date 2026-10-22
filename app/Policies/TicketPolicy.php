@@ -139,6 +139,52 @@ class TicketPolicy
         return $ticket->status->statusChangeTargets();
     }
 
+    /**
+     * Registro de pendência (CHA-08, RF-10, RF-17): `tickets.change_status` (o PRD não define uma
+     * permissão própria), acesso ao chamado e um tipo de pendência admitido no estado atual; com
+     * `$type`, aquele tipo. Visibilidade global não basta (RN-03). A action confere de novo sobre o
+     * estado bloqueado.
+     */
+    public function registerPending(User $user, Ticket $ticket, ?TicketStatus $type = null): bool
+    {
+        $types = self::pendingTargets($ticket);
+
+        return ($type === null ? $types !== [] : in_array($type, $types, true))
+            && $user->hasPermission('tickets.change_status')
+            && $this->view($user, $ticket);
+    }
+
+    /**
+     * Tipos de pendência para o chamado no estado atual: só a partir de `Em atendimento` (RF-10).
+     *
+     * @return list<TicketStatus>
+     */
+    public static function pendingTargets(Ticket $ticket): array
+    {
+        return $ticket->status->pendingTargets();
+    }
+
+    /**
+     * Resolução (CHA-09, RF-12): `tickets.resolve`, acesso ao chamado e status que admite a
+     * resolução (`Em atendimento`). Distinta do encerramento (RF-14, `tickets.close`) e da
+     * alteração de status (`tickets.change_status`). A action confere de novo sobre o estado bloqueado.
+     */
+    public function resolve(User $user, Ticket $ticket): bool
+    {
+        return $ticket->status->resolvable()
+            && $user->hasPermission('tickets.resolve')
+            && $this->view($user, $ticket);
+    }
+
+    /**
+     * Dados da pendência ativa (motivo, fornecedor, protocolo...): somente a equipe de suporte,
+     * identificada por `tickets.view_internal_notes`. O solicitante vê apenas o status.
+     */
+    public function viewPendingDetails(User $user, Ticket $ticket): bool
+    {
+        return $user->hasPermission('tickets.view_internal_notes') && $this->view($user, $ticket);
+    }
+
     private function canEditAttribute(User $user, Ticket $ticket, string $permission): bool
     {
         return $user->hasPermission($permission)
