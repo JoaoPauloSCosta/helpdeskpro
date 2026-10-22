@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProfileController;
@@ -34,9 +35,8 @@ if (app()->environment('local')) {
     Route::get('/design-system', fn () => Inertia::render('DesignSystem'))->name('design-system');
 }
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+// IND-01 — Dashboard operacional (RF-20): indicadores restritos ao escopo da listagem de chamados.
+Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
