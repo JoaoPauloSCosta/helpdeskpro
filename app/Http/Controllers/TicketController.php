@@ -194,19 +194,27 @@ class TicketController extends Controller
         $managesStatus = $user->hasPermission('tickets.change_status');
         // Idem para a resolução (CHA-09).
         $resolves = $user->hasPermission('tickets.resolve');
+        // Idem para a reabertura (CHA-10), que depende da propriedade do chamado e não de permissão.
+        $ownsTicket = TicketPolicy::isOriginalRequester($user, $ticket);
+        // Idem para o encerramento (CHA-11).
+        $closes = $user->hasPermission('tickets.close');
 
         $comments = $ticket->comments()
             ->visibleTo($user)
+            ->select(['id', 'ticket_id', 'user_id', 'body', 'visibility', 'created_at'])
             ->with('author:id,name')
+            // Versões anteriores que o usuário pode ler (CHA-12); o conteúdo vem só sob demanda.
+            ->withCount(['versions' => fn (Builder $query) => $query->visibleTo($user)])
             ->orderBy('created_at')
             ->orderBy('id')
-            ->get(['id', 'ticket_id', 'user_id', 'body', 'visibility', 'created_at'])
+            ->get()
             ->map(fn (TicketComment $comment) => [
                 'id' => $comment->id,
                 'author' => $comment->author?->name,
                 'body' => $comment->body,
                 'internal' => $comment->visibility === CommentVisibility::Internal,
                 'created_at' => $comment->created_at?->toIso8601String(),
+                'edited' => $comment->versions_count > 0,
             ]);
 
         return Inertia::render('Tickets/Show', [
@@ -233,7 +241,10 @@ class TicketController extends Controller
                 'resolution' => [
                     'state' => $ticket->slaState($now)->value,
                     'due_at' => $ticket->resolution_due_at?->toIso8601String(),
-                    'met_at' => $ticket->resolved_at?->toIso8601String(),
+                    // Depois de uma reabertura, a resolução anterior não conta como meta atingida.
+                    'met_at' => in_array($ticket->status, TicketStatus::finished(), true)
+                        ? $ticket->resolved_at?->toIso8601String()
+                        : null,
                 ],
             ],
             'comments' => $comments,
@@ -249,6 +260,8 @@ class TicketController extends Controller
                 'changeStatus' => $user->can('changeStatus', $ticket),
                 'registerPending' => $user->can('registerPending', $ticket),
                 'resolve' => $user->can('resolve', $ticket),
+                'reopen' => $user->can('reopen', $ticket),
+                'close' => $user->can('close', $ticket),
             ],
             // Status atual e limite do resumo (CHA-09); só a quem tem `tickets.resolve`.
             'resolutionForm' => $resolves ? [
@@ -257,6 +270,17 @@ class TicketController extends Controller
             ] : null,
             // Solução registrada (RF-12), para todos que acessam o chamado.
             'resolution' => $this->resolution($ticket),
+            // Status atual e limite da justificativa (CHA-10); só ao solicitante original.
+            'reopenForm' => $ownsTicket ? [
+                'current' => $ticket->status->value,
+                'limits' => ['justification' => Ticket::REOPEN_JUSTIFICATION_MAX_LENGTH],
+            ] : null,
+            // Última reabertura (RF-13), para todos que acessam o chamado.
+            'reopening' => $this->reopening($ticket),
+            // Status atual (CHA-11); só a quem tem `tickets.close`.
+            'closeForm' => $closes ? ['current' => $ticket->status->value] : null,
+            // Encerramento registrado (RF-14), para todos que acessam o chamado.
+            'closure' => $this->closure($ticket),
             // Tipos de pendência permitidos e seus campos (CHA-08); só a quem pode alterar status.
             'pending' => $managesStatus ? $this->pendingOptions($ticket) : null,
             // Pendência em andamento, somente para a equipe de suporte.
@@ -395,6 +419,51 @@ class TicketController extends Controller
         ];
     }
 
+    /**
+     * Justificativa da última reabertura (RF-13), enquanto o chamado não voltou a ser resolvido ou
+     * encerrado. Vem do evento gravado; reaberturas anteriores ficam no histórico.
+     */
+    private function reopening(Ticket $ticket): ?array
+    {
+        if (in_array($ticket->status, TicketStatus::finished(), true)) {
+            return null;
+        }
+
+        $event = $ticket->histories()
+            ->where('event_type', TicketEvent::Reopened)
+            ->with('author:id,name')
+            ->latest('id')
+            ->first();
+
+        return $event ? [
+            'justification' => $event->new_values['justification'] ?? null,
+            'reopened_at' => $event->created_at?->toIso8601String(),
+            'author' => $event->author?->name,
+        ] : null;
+    }
+
+    /**
+     * Encerramento (RF-14), enquanto o chamado está encerrado. O instante é o gravado no chamado; o
+     * autor vem do evento de encerramento, pois o chamado não guarda uma cópia dele.
+     */
+    private function closure(Ticket $ticket): ?array
+    {
+        if ($ticket->status !== TicketStatus::Closed) {
+            return null;
+        }
+
+        $event = $ticket->histories()
+            ->where('event_type', TicketEvent::Closed)
+            ->with('author:id,name')
+            ->latest('id')
+            ->first();
+
+        return [
+            'closed_at' => $ticket->closed_at?->toIso8601String(),
+            'author' => $event?->author?->name,
+        ];
+    }
+
     /** Eventos registrados do chamado, em ordem cronológica. Nada é derivado do estado atual. */
     private function history(Ticket $ticket): array
     {
@@ -413,6 +482,8 @@ class TicketController extends Controller
                 'reason' => $event->new_values['reason'] ?? null,
                 // Resumo da solução registrado na resolução (CHA-09).
                 'summary' => $event->new_values['resolution_summary'] ?? null,
+                // Justificativa informada na reabertura (CHA-10).
+                'justification' => $event->new_values['justification'] ?? null,
                 'created_at' => $event->created_at?->toIso8601String(),
             ])
             ->all();

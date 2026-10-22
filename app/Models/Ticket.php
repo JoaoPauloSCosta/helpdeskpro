@@ -34,6 +34,12 @@ class Ticket extends Model
     /** `resolution_summary` também é TEXT: mesmo limite da descrição. */
     public const RESOLUTION_SUMMARY_MAX_LENGTH = 16383;
 
+    /**
+     * Justificativa da reabertura (CHA-10), gravada no evento de auditoria. A coluna JSON não impõe
+     * um limite menor; vale o mesmo dos demais textos livres do chamado (motivo, resumo, comentário).
+     */
+    public const REOPEN_JUSTIFICATION_MAX_LENGTH = 16383;
+
     protected function casts(): array
     {
         return [

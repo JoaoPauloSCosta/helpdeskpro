@@ -116,6 +116,28 @@ export interface TicketCommentItem {
     body: string;
     internal: boolean;
     created_at: string | null;
+    /** Há versões anteriores que o usuário pode consultar (CHA-12). */
+    edited: boolean;
+}
+
+/** Uma versão do conteúdo de um comentário (CHA-12). Somente leitura. */
+export interface TicketCommentVersion {
+    /** Posição na sequência de versões; 1 é o texto original. */
+    number: number;
+    body: string;
+    internal: boolean;
+    /** Quem escreveu este texto: o autor do comentário ou quem fez a edição. */
+    author: string | null;
+    recorded_at: string | null;
+    original: boolean;
+    current: boolean;
+}
+
+/** Histórico de versões de um comentário (CHA-12), da mais recente para a original. */
+export interface TicketCommentHistory {
+    ticket: string;
+    internal: boolean;
+    versions: TicketCommentVersion[];
 }
 
 /** Técnico responsável ou elegível para atribuição (CHA-05). */
@@ -199,6 +221,32 @@ export interface TicketResolution {
     author: string | null;
 }
 
+/** Reabertura (CHA-10), enviada somente ao solicitante original. */
+export interface TicketReopenForm {
+    /** Valor técnico do status atual, reenviado para detectar alterações concorrentes. */
+    current: string;
+    limits: { justification: number };
+}
+
+/** Última reabertura (RF-13), presente enquanto o chamado não voltou a ser resolvido ou encerrado. */
+export interface TicketReopening {
+    justification: string | null;
+    reopened_at: string | null;
+    author: string | null;
+}
+
+/** Encerramento (CHA-11), enviado somente a quem tem `tickets.close`. */
+export interface TicketCloseForm {
+    /** Valor técnico do status atual, reenviado para detectar alterações concorrentes. */
+    current: string;
+}
+
+/** Encerramento registrado (RF-14), presente enquanto o chamado está encerrado. */
+export interface TicketClosure {
+    closed_at: string | null;
+    author: string | null;
+}
+
 /** Evento de auditoria (RF-19), enviado somente a quem tem `audit.view`. */
 export interface TicketHistoryItem {
     id: number;
@@ -210,7 +258,73 @@ export interface TicketHistoryItem {
     reason: string | null;
     /** Resumo da solução informado na resolução. */
     summary: string | null;
+    /** Justificativa informada na reabertura. */
+    justification: string | null;
     created_at: string | null;
+}
+
+/**
+ * Período de pausa do SLA de resolução (RF-17), numerado em ordem cronológica. Motivo, dados da
+ * pendência e autor só chegam à equipe de suporte.
+ */
+export interface TicketSlaPauseItem {
+    number: number;
+    type: TicketStatus;
+    started_at: string;
+    /** `null`: pausa em andamento. */
+    ended_at: string | null;
+    /** Gravada na retomada; `null` enquanto a pausa está em andamento. */
+    duration_seconds: number | null;
+    reason?: string;
+    supplier_name?: string | null;
+    protocol_number?: string | null;
+    related_department?: string | null;
+    responsible_name?: string | null;
+    /** AAAA-MM-DD. */
+    expected_return_at?: string | null;
+    author?: string | null;
+}
+
+interface TicketSlaEventBase {
+    id: number;
+    created_at: string | null;
+    /** Somente para a equipe de suporte. */
+    author?: string | null;
+}
+
+/** Evento gravado que afeta ou documenta o SLA (CHA-13). Nada é derivado do estado atual. */
+export type TicketSlaEvent = TicketSlaEventBase &
+    (
+        | { kind: 'pause_started'; to: TicketStatus | null }
+        | {
+              kind: 'resumed';
+              from: TicketStatus | null;
+              to: TicketStatus | null;
+              duration_seconds: number | null;
+              /** `false`: pausa anterior ao registro de pendências, sem período gravado. */
+              pause_recorded: boolean;
+          }
+        | { kind: 'priority_changed'; from: TicketPriority | null; to: TicketPriority | null }
+        | {
+              kind: 'resolved';
+              resolution_due_at: string | null;
+              /** `null`: não havia prazo gravado no momento da resolução. */
+              on_time: boolean | null;
+          }
+        | { kind: 'reopened'; first_response_due_at: string | null; resolution_due_at: string | null }
+        | { kind: 'closed' }
+    );
+
+/** Histórico de SLA do chamado (CHA-13), carregado sob demanda. Eventos e pausas do mais recente ao mais antigo. */
+export interface TicketSlaHistory {
+    ticket: string;
+    pauses: {
+        count: number;
+        /** Soma das pausas encerradas; `null` se nenhuma foi encerrada. */
+        closed_seconds: number | null;
+        items: TicketSlaPauseItem[];
+    };
+    events: TicketSlaEvent[];
 }
 
 export const ticketFilterKeys = [
@@ -237,6 +351,17 @@ const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyl
 
 /** Data e hora no fuso do navegador (ex.: 21/10/2026 09:12). */
 export const formatDateTime = (iso: string | null): string => (iso ? dateTime.format(new Date(iso)) : '—');
+
+/** Duração gravada pelo backend, em segundos (ex.: "1 d 2 h 5 min"). */
+export const formatDuration = (seconds: number): string => {
+    if (seconds < 60) return `${seconds} s`;
+
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    return [days && `${days} d`, hours && `${hours} h`, minutes && `${minutes} min`].filter(Boolean).join(' ');
+};
 
 /** Converte AAAA-MM-DD em DD/MM/AAAA sem conversão de fuso. */
 export const formatDate = (ymd: string): string => ymd.split('-').reverse().join('/');

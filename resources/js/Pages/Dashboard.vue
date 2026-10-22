@@ -12,7 +12,7 @@ import { Head } from '@inertiajs/vue3';
             <PageHeader title="Visão geral" />
 
             <div class="rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-900 shadow-sm sm:p-6">
-                You're logged in!
+                Você está logado!
             </div>
         </div>
     </AuthenticatedLayout>

@@ -35,10 +35,11 @@ defineEmits<{ 'show-history': [] }>();
                 <button
                     v-if="canViewHistory"
                     type="button"
+                    aria-haspopup="dialog"
                     class="rounded text-xs text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                     @click="$emit('show-history')"
                 >
-                    (editado) · ver versões
+                    (editado) · ver versões anteriores
                 </button>
                 <span v-else class="text-xs text-neutral-500">(editado)</span>
             </template>

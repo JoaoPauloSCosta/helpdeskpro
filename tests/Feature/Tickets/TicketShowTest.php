@@ -63,7 +63,7 @@ test('the requester sees the ticket with only the data the page needs', function
             ->where('can', [
                 'comment' => true, 'addInternalNote' => false, 'update' => false,
                 'assign' => false, 'reassign' => false, 'selfAssign' => false, 'changeStatus' => false,
-                'registerPending' => false, 'resolve' => false,
+                'registerPending' => false, 'resolve' => false, 'reopen' => false, 'close' => false,
             ])
             ->where('assignment', null)
             ->where('statusChange', null)
@@ -71,6 +71,12 @@ test('the requester sees the ticket with only the data the page needs', function
             ->where('activePending', null)
             ->where('resolutionForm', null)
             ->where('resolution', null)
+            // O solicitante original recebe o formulário de reabertura (CHA-10), ainda indisponível.
+            ->where('reopenForm.current', 'open')
+            ->where('reopening', null)
+            // O solicitante não encerra chamados (CHA-11): sem `tickets.close`, nada é enviado.
+            ->where('closeForm', null)
+            ->where('closure', null)
             ->missing('assignableTechnicians'));
 });
 
@@ -138,7 +144,7 @@ test('comments are listed in chronological order', function () {
     $response = $this->actingAs($this->requester)->get(showUrl($this->ticket));
 
     expect(collect(detailProps($response)['comments'])->pluck('id')->all())->toBe([$earlier->id, $later->id])
-        ->and(array_keys(detailProps($response)['comments'][0]))->toBe(['id', 'author', 'body', 'internal', 'created_at']);
+        ->and(array_keys(detailProps($response)['comments'][0]))->toBe(['id', 'author', 'body', 'internal', 'created_at', 'edited']);
 });
 
 test('the requester adds a public comment as the authenticated author', function () {

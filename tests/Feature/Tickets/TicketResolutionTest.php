@@ -328,7 +328,7 @@ test('a new resolution after a reopening preserves the previous one in the histo
     postResolution($this->tech, $this->ticket)->assertSessionHasNoErrors();
     $firstAt = now()->copy();
 
-    // A reabertura (CHA-10) ainda não existe: simula o chamado de volta ao atendimento.
+    // Simula o chamado de volta ao atendimento; o ciclo completo com a reabertura está no TicketReopeningTest.
     $this->ticket->fresh()->forceFill(['status' => TicketStatus::InProgress])->save();
     $this->travel(2)->hours();
 

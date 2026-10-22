@@ -177,6 +177,41 @@ class TicketPolicy
     }
 
     /**
+     * Reabertura (CHA-10, RF-13): fluxo normal do solicitante original, a partir de `Resolvido`.
+     * Decidida pela propriedade do chamado, não por papel ou permissão: técnicos, gestores e
+     * administradores não reabrem chamados de outras pessoas por este fluxo. Chamados encerrados
+     * não são reabertos (RF-13, regra 5). A action confere de novo sobre o estado bloqueado.
+     */
+    public function reopen(User $user, Ticket $ticket): bool
+    {
+        return $ticket->status->reopenable()
+            && self::isOriginalRequester($user, $ticket)
+            && $this->view($user, $ticket);
+    }
+
+    /**
+     * Encerramento (CHA-11, RF-14): `tickets.close`, acesso ao chamado e status `Resolvido`.
+     * Distinto da resolução (`tickets.resolve`, RN-07). Ser o solicitante, ter visibilidade global ou
+     * um papel administrativo não basta: só a permissão explícita (RF-14, regras 3 a 5).
+     * A action confere de novo sobre o estado bloqueado.
+     */
+    public function close(User $user, Ticket $ticket): bool
+    {
+        return $ticket->status->closable()
+            && $user->hasPermission('tickets.close')
+            && $this->view($user, $ticket);
+    }
+
+    /**
+     * Se o usuário é o solicitante original, pela relação gravada no chamado (RN-01). Como na
+     * abertura, usuários sem papel ainda não foram liberados e não recebem a ação.
+     */
+    public static function isOriginalRequester(User $user, Ticket $ticket): bool
+    {
+        return $user->role_id !== null && $ticket->requester_id === $user->id;
+    }
+
+    /**
      * Dados da pendência ativa (motivo, fornecedor, protocolo...): somente a equipe de suporte,
      * identificada por `tickets.view_internal_notes`. O solicitante vê apenas o status.
      */

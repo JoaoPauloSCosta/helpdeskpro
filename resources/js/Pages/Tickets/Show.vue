@@ -20,17 +20,25 @@ import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AssignTechnicianModal from '@/Pages/Tickets/Partials/AssignTechnicianModal.vue';
 import ChangeStatusModal from '@/Pages/Tickets/Partials/ChangeStatusModal.vue';
+import CloseModal from '@/Pages/Tickets/Partials/CloseModal.vue';
+import CommentHistoryModal from '@/Pages/Tickets/Partials/CommentHistoryModal.vue';
 import PendingModal from '@/Pages/Tickets/Partials/PendingModal.vue';
+import ReopenModal from '@/Pages/Tickets/Partials/ReopenModal.vue';
 import ResolveModal from '@/Pages/Tickets/Partials/ResolveModal.vue';
 import SelfAssignModal from '@/Pages/Tickets/Partials/SelfAssignModal.vue';
+import SlaHistory from '@/Pages/Tickets/Partials/SlaHistory.vue';
 import {
     formatDate,
     formatDateTime,
     type TicketActivePending,
+    type TicketCloseForm,
+    type TicketClosure,
     type TicketCommentItem,
     type TicketDetail,
     type TicketHistoryItem,
     type TicketPendingRegistration,
+    type TicketReopenForm,
+    type TicketReopening,
     type TicketResolution,
     type TicketResolutionForm,
     type TicketStatusChange,
@@ -54,6 +62,8 @@ const props = defineProps<{
         changeStatus: boolean;
         registerPending: boolean;
         resolve: boolean;
+        reopen: boolean;
+        close: boolean;
     };
     /** `null`: o usuário não gerencia atribuições. */
     assignment: { current: TicketTechnician | null } | null;
@@ -67,6 +77,14 @@ const props = defineProps<{
     resolutionForm: TicketResolutionForm | null;
     /** `null`: o chamado não está resolvido nem encerrado. */
     resolution: TicketResolution | null;
+    /** `null`: o usuário não é o solicitante original (CHA-10). */
+    reopenForm: TicketReopenForm | null;
+    /** `null`: o chamado não foi reaberto ou voltou a ser resolvido ou encerrado. */
+    reopening: TicketReopening | null;
+    /** `null`: o usuário não encerra chamados (`tickets.close`). */
+    closeForm: TicketCloseForm | null;
+    /** `null`: o chamado não está encerrado. */
+    closure: TicketClosure | null;
     /** Recarga parcial: só existe depois que o modal de atribuição pede a lista. */
     assignableTechnicians?: TicketTechnician[];
     limits: { comment: number };
@@ -103,6 +121,24 @@ const pendingOpen = ref(false);
 /* ---------- Resolução (CHA-09) ---------- */
 
 const resolveOpen = ref(false);
+
+/* ---------- Reabertura (CHA-10) ---------- */
+
+const reopenOpen = ref(false);
+
+/* ---------- Encerramento (CHA-11) ---------- */
+
+const closeOpen = ref(false);
+
+/* ---------- Histórico de comentários (CHA-12) ---------- */
+
+/** Mensagem cujo histórico está aberto; mantida durante a animação de fechamento. */
+const historyComment = ref<TicketCommentItem | null>(null);
+const historyOpen = ref(false);
+const openHistory = (comment: TicketCommentItem) => {
+    historyComment.value = comment;
+    historyOpen.value = true;
+};
 
 /** [rótulo, valor] dos dados registrados da pendência em andamento; vazios são omitidos. */
 const pendingDetails = computed(() => {
@@ -230,12 +266,18 @@ const commentCount = computed(() =>
                         </p>
                     </div>
                     <!-- Somente ações implementadas e autorizadas; as do ciclo de vida virão com seus fluxos -->
-                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign || can.changeStatus || can.registerPending || can.resolve" class="flex shrink-0 flex-wrap gap-2">
+                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign || can.changeStatus || can.registerPending || can.resolve || can.reopen || can.close" class="flex shrink-0 flex-wrap gap-2">
                         <Button v-if="can.selfAssign" @click="selfAssignNumber = ticket.number">
                             <Icon name="check" :size="16" /> Assumir chamado
                         </Button>
                         <Button v-if="can.resolve && resolutionForm" @click="resolveOpen = true">
                             <Icon name="check-circle" :size="16" /> Resolver chamado
+                        </Button>
+                        <Button v-if="can.reopen && reopenForm" @click="reopenOpen = true">
+                            <Icon name="arrow-path" :size="16" /> Reabrir chamado
+                        </Button>
+                        <Button v-if="can.close && closeForm" @click="closeOpen = true">
+                            <Icon name="lock" :size="16" /> Encerrar chamado
                         </Button>
                         <Button v-if="can.changeStatus && statusChange" variant="secondary" @click="statusOpen = true">
                             <Icon name="chevron-right" :size="16" /> Alterar status
@@ -264,7 +306,7 @@ const commentCount = computed(() =>
             </Alert>
 
             <!-- SLA: somente o que o backend registrou; nada é estimado no navegador -->
-            <section aria-labelledby="sla-title">
+            <section aria-labelledby="sla-title" class="space-y-4">
                 <h2 id="sla-title" class="sr-only">Indicadores de SLA</h2>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div
@@ -289,6 +331,9 @@ const commentCount = computed(() =>
                         </dl>
                     </div>
                 </div>
+
+                <!-- Histórico de SLA (CHA-13): carregado sob demanda, somente leitura -->
+                <SlaHistory :ticket="ticket" />
             </section>
 
             <div class="grid gap-6 lg:grid-cols-3">
@@ -327,6 +372,24 @@ const commentCount = computed(() =>
                             Resolvido<template v-if="resolution.author"> por <span class="font-medium text-neutral-900">{{ resolution.author }}</span></template>
                             em {{ formatDateTime(resolution.resolved_at) }}
                         </p>
+                        <!-- Encerramento (RF-14): instante e autor gravados pelo backend -->
+                        <p v-if="closure" class="mt-1 text-xs text-neutral-600">
+                            Encerrado<template v-if="closure.author"> por <span class="font-medium text-neutral-900">{{ closure.author }}</span></template>
+                            em {{ formatDateTime(closure.closed_at) }}
+                        </p>
+                    </Card>
+
+                    <!-- Reabertura (RF-13): justificativa gravada pelo backend, sempre como texto -->
+                    <Card v-if="reopening">
+                        <template #header>
+                            <h2 class="text-lg font-semibold text-neutral-900">Reabertura</h2>
+                        </template>
+                        <p class="text-xs font-medium text-neutral-500">Justificativa</p>
+                        <p class="mt-0.5 whitespace-pre-line break-words text-sm text-neutral-900">{{ reopening.justification }}</p>
+                        <p class="mt-4 border-t border-neutral-200 pt-4 text-xs text-neutral-600">
+                            Reaberto<template v-if="reopening.author"> por <span class="font-medium text-neutral-900">{{ reopening.author }}</span></template>
+                            em {{ formatDateTime(reopening.reopened_at) }}
+                        </p>
                     </Card>
 
                     <!-- Interações -->
@@ -343,6 +406,9 @@ const commentCount = computed(() =>
                                     :date="formatDateTime(comment.created_at)"
                                     :body="comment.body"
                                     :internal="comment.internal"
+                                    :edited="comment.edited"
+                                    can-view-history
+                                    @show-history="openHistory(comment)"
                                 />
                             </li>
                         </ol>
@@ -462,6 +528,7 @@ const commentCount = computed(() =>
                                 <template v-else-if="event.to">{{ event.to }}</template>
                                 <p v-if="event.reason" class="mt-1 whitespace-pre-line break-words">Motivo: {{ event.reason }}</p>
                                 <p v-if="event.summary" class="mt-1 whitespace-pre-line break-words">Solução: {{ event.summary }}</p>
+                                <p v-if="event.justification" class="mt-1 whitespace-pre-line break-words">Justificativa: {{ event.justification }}</p>
                             </TimelineItem>
                         </Timeline>
                     </Card>
@@ -499,6 +566,29 @@ const commentCount = computed(() =>
             :resolution="resolutionForm"
             :allowed="can.resolve"
             @close="resolveOpen = false"
+        />
+        <ReopenModal
+            v-if="reopenForm"
+            :show="reopenOpen"
+            :ticket="ticket"
+            :reopen="reopenForm"
+            :allowed="can.reopen"
+            @close="reopenOpen = false"
+        />
+        <CloseModal
+            v-if="closeForm"
+            :show="closeOpen"
+            :ticket="ticket"
+            :closing="closeForm"
+            :resolution="resolution"
+            :allowed="can.close"
+            @close="closeOpen = false"
+        />
+        <CommentHistoryModal
+            :show="historyOpen"
+            :ticket="ticket"
+            :comment="historyComment"
+            @close="historyOpen = false"
         />
         <SelfAssignModal :number="selfAssignNumber" @close="selfAssignNumber = null" />
     </AuthenticatedLayout>

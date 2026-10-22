@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Comentários públicos e notas internas (RF-11, PRD seção 7.1). Não há exclusão pelo fluxo
- * normal; o histórico de versões (`ticket_comment_versions`) chega com a edição de comentários.
+ * normal; as versões anteriores ficam em `ticket_comment_versions` (CHA-12).
  */
 return new class extends Migration
 {

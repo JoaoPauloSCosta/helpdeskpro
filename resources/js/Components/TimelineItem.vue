@@ -5,8 +5,8 @@ withDefaults(
         author?: string;
         /** Data e hora já formatadas para exibição. */
         date: string;
-        /** primary: evento do chamado · success: resolução · danger: violação de SLA · neutral: administrativo */
-        tone?: 'primary' | 'success' | 'danger' | 'neutral';
+        /** primary: evento do chamado · success: resolução · warning: pausa de SLA · danger: violação de SLA · neutral: administrativo */
+        tone?: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
     }>(),
     { tone: 'primary' },
 );
@@ -14,6 +14,7 @@ withDefaults(
 const dot = {
     primary: 'bg-primary-500',
     success: 'bg-success',
+    warning: 'bg-warning',
     danger: 'bg-danger',
     neutral: 'bg-neutral-400',
 };

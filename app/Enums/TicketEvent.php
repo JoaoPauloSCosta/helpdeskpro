@@ -5,7 +5,8 @@ namespace App\Enums;
 /**
  * Tipos de evento gravados em `ticket_histories` (RF-19). Por enquanto os da edição operacional
  * (CHA-04), da atribuição (CHA-05), da autoatribuição (CHA-06), da alteração de status (CHA-07),
- * do registro de pendência (CHA-08) e da resolução (CHA-09); os demais eventos do RF-19 entram com
+ * do registro de pendência (CHA-08), da resolução (CHA-09), da reabertura (CHA-10), do
+ * encerramento (CHA-11) e da edição de comentários (CHA-12); os demais eventos do RF-19 entram com
  * seus próprios fluxos.
  * A retomada de uma pendência é um `StatusChanged` que também registra o fim da pausa.
  */
@@ -20,6 +21,9 @@ enum TicketEvent: string
     case StatusChanged = 'status_changed';
     case PendingRegistered = 'pending_registered';
     case Resolved = 'resolved';
+    case Reopened = 'reopened';
+    case Closed = 'closed';
+    case CommentEdited = 'comment_edited';
 
     public function label(): string
     {
@@ -33,6 +37,9 @@ enum TicketEvent: string
             self::StatusChanged => 'Status alterado',
             self::PendingRegistered => 'Pendência registrada',
             self::Resolved => 'Chamado resolvido',
+            self::Reopened => 'Chamado reaberto',
+            self::Closed => 'Chamado encerrado',
+            self::CommentEdited => 'Comentário editado',
         };
     }
 }

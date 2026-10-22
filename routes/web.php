@@ -2,12 +2,16 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TicketAssignmentController;
+use App\Http\Controllers\TicketClosingController;
 use App\Http\Controllers\TicketCommentController;
+use App\Http\Controllers\TicketCommentVersionController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketEditController;
 use App\Http\Controllers\TicketPendingController;
+use App\Http\Controllers\TicketReopeningController;
 use App\Http\Controllers\TicketResolutionController;
 use App\Http\Controllers\TicketSelfAssignmentController;
+use App\Http\Controllers\TicketSlaHistoryController;
 use App\Http\Controllers\TicketStatusController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -39,7 +43,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/tickets/{ticket}/status', [TicketStatusController::class, 'update'])->name('tickets.status.update');
     Route::post('/tickets/{ticket}/pending', [TicketPendingController::class, 'store'])->name('tickets.pending.store');
     Route::post('/tickets/{ticket}/resolution', [TicketResolutionController::class, 'store'])->name('tickets.resolution.store');
+    Route::post('/tickets/{ticket}/reopening', [TicketReopeningController::class, 'store'])->name('tickets.reopening.store');
+    Route::post('/tickets/{ticket}/closing', [TicketClosingController::class, 'store'])->name('tickets.closing.store');
     Route::post('/tickets/{ticket}/comments', [TicketCommentController::class, 'store'])->name('tickets.comments.store');
+    // Somente leitura (CHA-12): o comentário é buscado dentro do chamado, depois da autorização.
+    Route::get('/tickets/{ticket}/comments/{comment}/versions', [TicketCommentVersionController::class, 'index'])
+        ->whereNumber('comment')
+        ->name('tickets.comments.versions.index');
+    // Somente leitura (CHA-13): períodos de pausa e eventos que afetam o SLA do chamado.
+    Route::get('/tickets/{ticket}/sla-history', [TicketSlaHistoryController::class, 'index'])->name('tickets.sla-history.index');
 });
 
 Route::middleware('auth')->group(function () {

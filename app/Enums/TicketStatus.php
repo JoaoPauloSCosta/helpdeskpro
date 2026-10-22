@@ -104,6 +104,18 @@ enum TicketStatus: string
         return ($this->transitions()[self::Resolved->value] ?? null) === TicketTransitionFlow::Resolution;
     }
 
+    /** Se a reabertura (CHA-10, RF-13) pode partir deste status. */
+    public function reopenable(): bool
+    {
+        return ($this->transitions()[self::Open->value] ?? null) === TicketTransitionFlow::Reopening;
+    }
+
+    /** Se o encerramento (CHA-11, RF-14) pode partir deste status. */
+    public function closable(): bool
+    {
+        return ($this->transitions()[self::Closed->value] ?? null) === TicketTransitionFlow::Closing;
+    }
+
     /** @return list<self> */
     private function targetsOf(TicketTransitionFlow $flow): array
     {

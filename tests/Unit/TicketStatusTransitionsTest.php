@@ -51,6 +51,18 @@ test('only tickets in progress can be resolved', function () {
     expect($resolvable)->toBe([TicketStatus::InProgress]);
 });
 
+test('only resolved tickets can be reopened', function () {
+    $reopenable = array_values(array_filter(TicketStatus::cases(), fn (TicketStatus $s) => $s->reopenable()));
+
+    expect($reopenable)->toBe([TicketStatus::Resolved]);
+});
+
+test('only resolved tickets can be closed', function () {
+    $closable = array_values(array_filter(TicketStatus::cases(), fn (TicketStatus $s) => $s->closable()));
+
+    expect($closable)->toBe([TicketStatus::Resolved]);
+});
+
 test('only paused statuses accept pending fields', function () {
     foreach (TicketStatus::cases() as $status) {
         expect($status->pendingFields() !== [])->toBe(in_array($status, TicketStatus::paused(), true));
