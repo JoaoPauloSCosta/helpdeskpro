@@ -20,6 +20,12 @@ class Role extends Model
      */
     public const DESCRIPTION_MAX_LENGTH = 1000;
 
+    /**
+     * Papel atribuído no cadastro público (RF-01): Solicitante, sem permissões administrativas nem
+     * de atendimento. Outros papéis só são concedidos depois pela administração (ADM-03).
+     */
+    public const SELF_REGISTRATION_SLUG = 'requester';
+
     protected $fillable = ['name', 'slug', 'description', 'is_system'];
 
     protected function casts(): array

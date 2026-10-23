@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -37,11 +38,15 @@ class RegisteredUserController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        $user = User::create([
+        // O papel não vem da requisição (RF-01): todo cadastro público entra como Solicitante.
+        // `role_id` não é mass assignable em User, por isso a atribuição explícita.
+        $user = (new User)->forceFill([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'role_id' => Role::where('slug', Role::SELF_REGISTRATION_SLUG)->valueOrFail('id'),
         ]);
+        $user->save();
 
         event(new Registered($user));
 
