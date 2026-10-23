@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\TicketCommentController;
 use App\Http\Controllers\TicketCommentVersionController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketEditController;
+use App\Http\Controllers\TicketExportController;
 use App\Http\Controllers\TicketPendingController;
 use App\Http\Controllers\TicketReopeningController;
 use App\Http\Controllers\TicketResolutionController;
@@ -40,6 +42,8 @@ Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['au
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
+    // EXP-01: exportação CSV (RF-21). Antes de /tickets/{ticket}, para "export" não ser lido como identificador.
+    Route::get('/tickets/export', TicketExportController::class)->name('tickets.export');
     Route::get('/tickets/create', [TicketController::class, 'create'])->name('tickets.create');
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
     // Definida depois de /tickets/create, para "create" não ser lido como identificador.
@@ -96,6 +100,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/admin/roles/{role}/permissions', [RolePermissionController::class, 'update'])->whereNumber('role')->name('admin.roles.permissions.update');
     // PER-05: somente consulta, com `roles.manage`. Os detalhes abrem na própria listagem (`?selected=`).
     Route::get('/admin/permissions', [PermissionController::class, 'index'])->name('admin.permissions.index');
+
+    // AUD-01: consulta de auditoria (RF-19), somente leitura, autorizada por `audit.view` no controller.
+    // Os detalhes abrem na própria listagem (`?selected=`).
+    Route::get('/audit', [AuditController::class, 'index'])->name('audit.index');
 
     // SLA-01 a SLA-04: autorizadas por `sla.manage` no controller e nos form requests.
     // Nos detalhes e na edição, a política é buscada só depois da autorização geral.

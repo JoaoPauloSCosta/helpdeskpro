@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import axios, { isAxiosError } from 'axios';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
 import Card from '@/Components/Card.vue';
@@ -19,6 +20,7 @@ import Spinner from '@/Components/Spinner.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import TextInput from '@/Components/TextInput.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
+import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import SelfAssignModal from '@/Pages/Tickets/Partials/SelfAssignModal.vue';
 import {
@@ -157,6 +159,69 @@ const sortBy = (key: TicketSortKey, direction?: Direction) => {
 const goToPage = (target: number) =>
     visit({ ...props.filters, ...sortParams(props.sort.key, props.sort.direction), page: target });
 
+/* ---------- Exportação CSV (EXP-01) ---------- */
+
+const toast = useToast();
+const exporting = ref(false);
+
+/** Mensagem do servidor (JSON dentro do blob) ou uma mensagem genérica por status. */
+const exportErrorMessage = async (error: unknown): Promise<string> => {
+    if (!isAxiosError(error) || !error.response) return 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
+
+    const { status, data } = error.response;
+    if (status === 403) return 'Você não tem permissão para exportar chamados.';
+    if (status === 422) {
+        try {
+            const body = JSON.parse(await (data as Blob).text()) as { message?: string };
+            if (body.message) return body.message;
+        } catch {
+            /* corpo ilegível: usa a mensagem padrão */
+        }
+        return 'Os filtros aplicados são inválidos. Revise-os e tente novamente.';
+    }
+
+    return 'Não foi possível gerar o arquivo. Tente novamente em instantes.';
+};
+
+/**
+ * Exporta todos os resultados dos filtros e da ordenação aplicados (não só a página atual). O arquivo
+ * é baixado pelo navegador só depois de o servidor devolvê-lo por inteiro; Inertia não é usado, pois a
+ * resposta é um arquivo, não uma página.
+ */
+const exportCsv = async () => {
+    if (exporting.value) return;
+    exporting.value = true;
+
+    try {
+        const response = await axios.get<Blob>(route('tickets.export'), {
+            params: { ...props.filters, ...sortParams(props.sort.key, props.sort.direction) },
+            responseType: 'blob',
+            headers: { Accept: 'application/json, text/csv' },
+        });
+
+        if (response.status === 204) {
+            toast.info('Nenhum chamado para exportar com os filtros aplicados.');
+            return;
+        }
+
+        const name = /filename="([^"]+)"/.exec(String(response.headers['content-disposition'] ?? ''))?.[1] ?? 'chamados.csv';
+        const url = URL.createObjectURL(response.data);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+
+        toast.success('Exportação concluída. O download foi iniciado.');
+    } catch (error) {
+        toast.error(await exportErrorMessage(error));
+    } finally {
+        exporting.value = false;
+    }
+};
+
 const direction = (key: TicketSortKey) => (props.sort.key === key ? props.sort.direction : null);
 
 // Falhas de rede ou respostas inesperadas do servidor viram um estado de erro com nova tentativa.
@@ -246,6 +311,16 @@ const mobileSort = computed({
     <AuthenticatedLayout>
         <div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
             <PageHeader title="Chamados" subtitle="Pesquise e acompanhe os chamados conforme seu acesso.">
+                <Button
+                    v-if="hasAnyTicket"
+                    variant="secondary"
+                    :loading="exporting"
+                    :disabled="processing"
+                    :aria-label="hasAppliedFilters ? 'Exportar CSV dos chamados filtrados' : 'Exportar CSV de todos os chamados'"
+                    @click="exportCsv"
+                >
+                    <Icon name="download" :size="16" /> {{ exporting ? 'Exportando…' : 'Exportar CSV' }}
+                </Button>
                 <Button v-if="can.create" :href="route('tickets.create')">
                     <Icon name="plus" :size="16" /> Novo chamado
                 </Button>

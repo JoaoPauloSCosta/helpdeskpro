@@ -42,7 +42,7 @@ export const navigation: NavItem[] = [
     { label: 'Chamados', icon: 'inbox', route: 'tickets.index', active: 'tickets.*' },
     { label: 'Administração', icon: 'users', active: 'admin.*', sections: adminSections },
     { label: 'Políticas de SLA', icon: 'clock', route: 'sla-policies.index', active: 'sla-policies.*', permission: 'sla.manage' },
-    { label: 'Auditoria', icon: 'shield-check' },
+    { label: 'Auditoria', icon: 'shield-check', route: 'audit.index', active: 'audit.*', permission: 'audit.view' },
     { label: 'Minha conta', icon: 'user', route: 'profile.edit', active: 'profile.*' },
 ];
 
