@@ -9,6 +9,7 @@ use App\Models\Ticket;
 use App\Models\TicketSlaPause;
 use App\Models\User;
 use App\Policies\TicketPolicy;
+use App\Support\SlaClock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -19,9 +20,11 @@ use Illuminate\Validation\ValidationException;
  * evento de auditoria são gravados juntos ou não são gravados; a linha do chamado fica bloqueada
  * entre a verificação e a gravação.
  *
- * SLA: ainda não há políticas nem cálculo de prazos (Etapa 7). A pausa registra o instante oficial
- * de início, e a retomada (ChangeTicketStatus) registra o fim e a duração; o motor de SLA usará
- * esses intervalos. Nenhum prazo, primeira resposta ou violação gravada é alterado aqui.
+ * SLA (RF-15.2, RF-17): a pausa registra o instante oficial de início, e a retomada
+ * (ChangeTicketStatus) registra o fim e a duração e estende o prazo de resolução. Aqui o prazo não
+ * muda: ele só se move na retomada, e o tempo consumido até agora vem do início da pausa. Antes de
+ * pausar, uma violação já vencida é registrada (RN-15), para não se perder com a extensão do prazo.
+ * Primeira resposta e `*_breached_at` já gravados nunca são alterados.
  */
 class RegisterTicketPending
 {
@@ -61,6 +64,7 @@ class RegisterTicketPending
 
             $now = now();
             $previous = $current->status;
+            SlaClock::recordBreaches($current, $now);
             $details = array_intersect_key($details, array_flip($type->pendingFields()));
 
             $current->forceFill(['status' => $type])->save();

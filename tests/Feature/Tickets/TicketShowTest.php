@@ -240,8 +240,8 @@ test('SLA indicators only reflect instants stored by the backend', function () {
     $this->actingAs($this->requester)
         ->get(showUrl($this->ticket))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('sla.firstResponse', ['state' => 'none', 'due_at' => null, 'met_at' => null])
-            ->where('sla.resolution', ['state' => 'none', 'due_at' => null, 'met_at' => null]));
+            ->where('sla.firstResponse', ['state' => 'none', 'due_at' => null, 'met_at' => null, 'target_minutes' => null, 'remaining_seconds' => null, 'breached_at' => null])
+            ->where('sla.resolution', ['state' => 'none', 'due_at' => null, 'met_at' => null, 'target_minutes' => null, 'remaining_seconds' => null, 'breached_at' => null]));
 
     $this->ticket->forceFill([
         'first_response_due_at' => now()->subHour(),

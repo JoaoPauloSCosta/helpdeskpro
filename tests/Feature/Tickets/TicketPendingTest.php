@@ -429,7 +429,7 @@ test('registering a pending keeps SLA deadlines, violations and first response',
 
     $ticket = $this->ticket->fresh();
 
-    // Sem motor de SLA (Etapa 7), nenhum prazo é recalculado e a pausa não esconde a violação gravada.
+    // Registrar a pendência não move nenhum prazo (ele só anda na retomada) e a pausa não esconde a violação gravada.
     foreach ($recorded as $column => $value) {
         expect($ticket->{$column}->equalTo($value))->toBeTrue();
     }

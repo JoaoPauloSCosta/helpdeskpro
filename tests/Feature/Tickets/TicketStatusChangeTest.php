@@ -277,7 +277,7 @@ test('a failure while recording the audit leaves the status untouched', function
 
 /* ---------- SLA ---------- */
 
-test('resuming keeps SLA deadlines and violations and does not count as first response', function () {
+test('resuming a ticket paused without a recorded pause keeps SLA deadlines and does not count as first response', function () {
     $deadlines = [
         'first_response_due_at' => now()->subHours(3)->startOfSecond(),
         'resolution_due_at' => now()->subHour()->startOfSecond(),
@@ -290,7 +290,7 @@ test('resuming keeps SLA deadlines and violations and does not count as first re
 
     $ticket = $this->ticket->fresh();
 
-    // Sem motor de SLA (Etapa 7), nada é recalculado: os prazos gravados e a violação se mantêm.
+    // Sem pausa registrada (anterior ao CHA-08) não há duração a somar: os prazos gravados se mantêm.
     foreach ($deadlines as $column => $value) {
         expect($ticket->{$column}->equalTo($value))->toBeTrue();
     }

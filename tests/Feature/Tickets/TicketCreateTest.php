@@ -1,14 +1,17 @@
 <?php
 
 use App\Actions\Tickets\OpenTicket;
+use App\Enums\TicketEvent;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Models\Department;
+use App\Models\SlaPolicy;
 use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\User;
 use App\Support\TicketNumberGenerator;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -134,9 +137,81 @@ test('an authorized user opens a ticket with backend-defined fields', function (
         ->and($ticket->assigned_to)->toBeNull()
         ->and($ticket->ticket_number)->toMatch('/^HD-['.TicketNumberGenerator::ALPHABET.']{8}$/');
 
-    // Motor de SLA ainda não implementado (Etapa 7): nenhum prazo é inventado.
+    // Sem política ativa para a prioridade (D2): abre sem prazo e sem política aplicada.
     expect($ticket->first_response_due_at)->toBeNull()
-        ->and($ticket->resolution_due_at)->toBeNull();
+        ->and($ticket->resolution_due_at)->toBeNull()
+        ->and($ticket->sla_policy_id)->toBeNull()
+        ->and($ticket->sla_first_response_minutes)->toBeNull()
+        ->and($ticket->sla_resolution_minutes)->toBeNull();
+});
+
+test('the active policy of the priority sets the copied targets and the deadlines from creation', function () {
+    $this->travelTo(Carbon::parse('2026-10-21 08:00:00'));
+    $policy = SlaPolicy::factory()->create(['priority' => 'high', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
+    SlaPolicy::factory()->create(['priority' => 'low', 'first_response_minutes' => 5, 'resolution_minutes' => 10]);
+    SlaPolicy::factory()->inactive()->create(['priority' => 'high', 'first_response_minutes' => 1, 'resolution_minutes' => 2]);
+
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+
+    $ticket = Ticket::sole();
+
+    expect($ticket->sla_policy_id)->toBe($policy->id)
+        ->and($ticket->sla_first_response_minutes)->toBe(30)
+        ->and($ticket->sla_resolution_minutes)->toBe(480)
+        ->and($ticket->created_at->toDateTimeString())->toBe('2026-10-21 08:00:00')
+        ->and($ticket->first_response_due_at->toDateTimeString())->toBe('2026-10-21 08:30:00')
+        ->and($ticket->resolution_due_at->toDateTimeString())->toBe('2026-10-21 16:00:00')
+        ->and($ticket->first_response_at)->toBeNull()
+        ->and($ticket->first_response_breached_at)->toBeNull()
+        ->and($ticket->resolution_breached_at)->toBeNull();
+});
+
+test('the creation event records the applied policy and deadlines', function () {
+    $this->travelTo(Carbon::parse('2026-10-21 08:00:00'));
+    $policy = SlaPolicy::factory()->create(['priority' => 'high', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
+
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+
+    $event = Ticket::sole()->histories()->where('event_type', TicketEvent::Created)->sole();
+
+    expect($event->new_values['sla'])->toBe([
+        'policy_id' => $policy->id,
+        'first_response_minutes' => 30,
+        'resolution_minutes' => 480,
+        'first_response_due_at' => '2026-10-21T08:30:00+00:00',
+        'resolution_due_at' => '2026-10-21T16:00:00+00:00',
+    ]);
+});
+
+test('a priority without active policy opens without deadlines and the event records it', function () {
+    SlaPolicy::factory()->create(['priority' => 'low']);
+    SlaPolicy::factory()->inactive()->create(['priority' => 'high']);
+
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+
+    $ticket = Ticket::sole();
+    $event = $ticket->histories()->where('event_type', TicketEvent::Created)->sole();
+
+    expect($ticket->sla_policy_id)->toBeNull()
+        ->and($ticket->first_response_due_at)->toBeNull()
+        ->and($ticket->resolution_due_at)->toBeNull()
+        ->and($event->new_values['sla'])->toBe(['policy_id' => null, 'no_policy' => true]);
+});
+
+test('changing the policy later does not change tickets already opened', function () {
+    $this->travelTo(Carbon::parse('2026-10-21 08:00:00'));
+    $policy = SlaPolicy::factory()->create(['priority' => 'high', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
+
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+
+    $policy->update(['first_response_minutes' => 5, 'resolution_minutes' => 10]);
+
+    $ticket = Ticket::sole()->fresh();
+
+    expect($ticket->sla_first_response_minutes)->toBe(30)
+        ->and($ticket->sla_resolution_minutes)->toBe(480)
+        ->and($ticket->first_response_due_at->toDateTimeString())->toBe('2026-10-21 08:30:00')
+        ->and($ticket->resolution_due_at->toDateTimeString())->toBe('2026-10-21 16:00:00');
 });
 
 test('the success redirect carries the generated identifier to the details page', function () {

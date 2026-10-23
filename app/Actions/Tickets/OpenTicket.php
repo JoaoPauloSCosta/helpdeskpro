@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\User;
+use App\Support\SlaClock;
 use App\Support\TicketNumberGenerator;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -17,8 +18,10 @@ use Illuminate\Support\Facades\DB;
  * são definidos aqui, nunca a partir dos dados enviados pelo navegador. O chamado e o evento de
  * auditoria da criação (RF-19) são gravados juntos ou não são gravados.
  *
- * Pendência de outra etapa: o cálculo dos prazos de SLA (Etapa 7, `sla_policies`) ainda não
- * existe; os prazos ficam nulos.
+ * SLA (RF-05 regra 7, RF-15.3): na mesma transação, aplica a política ativa da prioridade. O chamado
+ * guarda a política e a cópia das metas, e os prazos saem de `created_at` (primeira resposta e
+ * resolução). Sem política ativa, o chamado abre sem prazo e o evento de criação registra a
+ * ausência. Mudar a política depois não altera chamados já abertos.
  */
 class OpenTicket
 {
@@ -43,8 +46,8 @@ class OpenTicket
             ]);
 
             try {
-                // A transação também delimitará a gravação dos prazos de SLA quando o motor existir.
                 DB::transaction(function () use ($ticket, $requester) {
+                    $this->applySla($ticket);
                     $ticket->save();
                     $this->recordCreation($ticket, $requester);
                 });
@@ -56,6 +59,23 @@ class OpenTicket
         }
 
         throw new TicketNumberUnavailable;
+    }
+
+    /** Política ativa, cópia das metas e prazos a partir do instante de criação (D2: sem política, tudo nulo). */
+    private function applySla(Ticket $ticket): void
+    {
+        $createdAt = now();
+        $policy = SlaClock::policyFor($ticket->priority);
+
+        $ticket->forceFill([
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+            'sla_policy_id' => $policy?->id,
+            'sla_first_response_minutes' => $policy?->first_response_minutes,
+            'sla_resolution_minutes' => $policy?->resolution_minutes,
+            'first_response_due_at' => $policy ? $createdAt->copy()->addMinutes($policy->first_response_minutes) : null,
+            'resolution_due_at' => $policy ? $createdAt->copy()->addMinutes($policy->resolution_minutes) : null,
+        ]);
     }
 
     /**
@@ -75,6 +95,15 @@ class OpenTicket
                 'priority' => ['priority' => $ticket->priority->value, 'label' => $ticket->priority->label()],
                 'category' => ['id' => $ticket->category_id, 'label' => TicketCategory::whereKey($ticket->category_id)->value('name')],
                 'department' => ['id' => $ticket->department_id, 'label' => Department::whereKey($ticket->department_id)->value('name')],
+                'sla' => $ticket->sla_policy_id === null
+                    ? ['policy_id' => null, 'no_policy' => true]
+                    : [
+                        'policy_id' => $ticket->sla_policy_id,
+                        'first_response_minutes' => $ticket->sla_first_response_minutes,
+                        'resolution_minutes' => $ticket->sla_resolution_minutes,
+                        'first_response_due_at' => $ticket->first_response_due_at->toIso8601String(),
+                        'resolution_due_at' => $ticket->resolution_due_at->toIso8601String(),
+                    ],
             ],
             'created_at' => $ticket->created_at,
         ]);

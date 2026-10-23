@@ -7,6 +7,7 @@ use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Policies\TicketPolicy;
+use App\Support\SlaClock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -16,10 +17,12 @@ use Illuminate\Validation\ValidationException;
  * fluxo e altera apenas `status`. O chamado e o evento de auditoria são gravados juntos ou não
  * são gravados; a linha fica bloqueada entre a verificação e a gravação.
  *
- * SLA (RF-15.2, RF-17): na retomada, a pausa aberta pelo registro de pendência (CHA-08) é
- * encerrada na mesma transação, com fim e duração calculados aqui. Ainda não há motor de cálculo
- * (Etapa 7): aplicar o tempo restante ao prazo é o próximo passo neste mesmo ponto. Até lá, nenhum
- * prazo, primeira resposta ou violação gravada é alterado.
+ * SLA (RF-15.2, RF-17, RN-12, RN-13): na retomada, a pausa aberta pelo registro de pendência (CHA-08)
+ * é encerrada na mesma transação, com fim e duração calculados aqui, e `resolution_due_at` é
+ * estendido por essa duração, de modo que o tempo parado não conta. O prazo antes e depois vai no
+ * evento. Antes de qualquer mudança, uma violação já vencida é registrada (RN-15), para não se perder
+ * com a extensão. O prazo de primeira resposta, a primeira resposta e as violações gravadas não
+ * mudam. Chamados pausados antes do CHA-08 não têm pausa registrada: nada é estendido, como antes.
  */
 class ChangeTicketStatus
 {
@@ -55,9 +58,19 @@ class ChangeTicketStatus
             $pause = in_array($previous, TicketStatus::paused(), true)
                 ? $current->slaPauses()->active()->lockForUpdate()->first()
                 : null;
+
+            // Ainda com a pausa aberta: o relógio de resolução está parado no início dela.
+            SlaClock::recordBreaches($current, $now);
+
             $pause?->close($now);
 
-            $current->forceFill(['status' => $target])->save();
+            $dueBefore = $current->resolution_due_at;
+            $dueAfter = $pause && $dueBefore ? $dueBefore->copy()->addSeconds($pause->duration_seconds) : $dueBefore;
+
+            $current->forceFill([
+                'status' => $target,
+                ...($dueAfter !== $dueBefore ? ['resolution_due_at' => $dueAfter] : []),
+            ])->save();
 
             $current->histories()->forceCreate([
                 'user_id' => $editor->id,
@@ -71,6 +84,10 @@ class ChangeTicketStatus
                         'started_at' => $pause->started_at->toIso8601String(),
                         'ended_at' => $pause->ended_at->toIso8601String(),
                         'duration_seconds' => $pause->duration_seconds,
+                        ...($dueBefore ? [
+                            'resolution_due_before' => $dueBefore->toIso8601String(),
+                            'resolution_due_after' => $dueAfter->toIso8601String(),
+                        ] : []),
                     ]] : []),
                 ],
                 'created_at' => $now,

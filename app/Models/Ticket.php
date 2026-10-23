@@ -14,6 +14,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/**
+ * Chamado. Colunas de SLA (RF-15 a RF-17, RN-15): `sla_policy_id` e `sla_*_minutes` guardam a política
+ * e as metas aplicadas (nulas sem política, RF-15.3); `*_due_at` são os prazos vigentes;
+ * `*_breached_at` guardam a primeira violação de cada indicador e nunca são apagadas;
+ * `resolution_effective_seconds` é o tempo de resolução sem as pausas, gravado ao resolver.
+ */
 class Ticket extends Model
 {
     /** @use HasFactory<TicketFactory> */
@@ -50,7 +56,19 @@ class Ticket extends Model
             'resolution_due_at' => 'datetime',
             'resolved_at' => 'datetime',
             'closed_at' => 'datetime',
+            'sla_policy_id' => 'integer',
+            'sla_first_response_minutes' => 'integer',
+            'sla_resolution_minutes' => 'integer',
+            'first_response_breached_at' => 'datetime',
+            'resolution_breached_at' => 'datetime',
+            'resolution_effective_seconds' => 'integer',
         ];
+    }
+
+    /** Política de SLA aplicada na abertura ou na última troca de prioridade; nula sem política (RF-15.3). */
+    public function slaPolicy(): BelongsTo
+    {
+        return $this->belongsTo(SlaPolicy::class, 'sla_policy_id');
     }
 
     public function requester(): BelongsTo
@@ -135,7 +153,8 @@ class Ticket extends Model
     }
 
     /**
-     * Filtra pela situação do SLA. Espelha exatamente a regra de slaState().
+     * Filtra pela situação do SLA. Espelha exatamente a regra de slaState(): a situação atual, pelo
+     * prazo vigente. Não considera `resolution_breached_at`, que é o histórico de violação (RF-16.3).
      */
     public function scopeWhereSlaState(Builder $query, SlaState $state, ?CarbonInterface $now = null): Builder
     {
@@ -145,7 +164,14 @@ class Ticket extends Model
         return match ($state) {
             SlaState::Paused => $query->whereIn('tickets.status', $values(TicketStatus::paused())),
             SlaState::OnTrack => $query->whereIn('tickets.status', $values(TicketStatus::running()))
-                ->where('tickets.resolution_due_at', '>=', $now),
+                ->where('tickets.resolution_due_at', '>=', $now)
+                ->where(fn (Builder $query) => $query
+                    ->whereNull('tickets.sla_resolution_minutes')
+                    ->orWhereRaw('NOT ('.self::atRiskSql($query, $now)[0].')', self::atRiskSql($query, $now)[1])),
+            SlaState::AtRisk => $query->whereIn('tickets.status', $values(TicketStatus::running()))
+                ->where('tickets.resolution_due_at', '>=', $now)
+                ->whereNotNull('tickets.sla_resolution_minutes')
+                ->whereRaw(...self::atRiskSql($query, $now)),
             SlaState::Met => $query->whereIn('tickets.status', $values(TicketStatus::finished()))
                 ->whereNotNull('tickets.resolution_due_at')
                 ->whereNotNull('tickets.resolved_at')
@@ -169,8 +195,45 @@ class Ticket extends Model
     }
 
     /**
-     * Situação do SLA de resolução a partir dos prazos gravados pelo backend.
+     * Condição SQL de "Em risco": falta no máximo (100 − AT_RISK_PERCENT)% da meta aplicada, ou seja,
+     * `prazo − meta × 20% <= agora`. Mesma regra de atRisk(), em segundos inteiros. A subtração de
+     * segundos muda com o driver (MariaDB em produção, SQLite nos testes).
+     *
+     * @return array{0: string, 1: list<string>} SQL e bindings
+     */
+    private static function atRiskSql(Builder $query, CarbonInterface $now): array
+    {
+        $secondsPerMinute = 60 * (100 - SlaState::AT_RISK_PERCENT) / 100;
+        $now = $now->format('Y-m-d H:i:s');
+
+        return $query->getConnection()->getDriverName() === 'sqlite'
+            ? ["(strftime('%s', tickets.resolution_due_at) - tickets.sla_resolution_minutes * {$secondsPerMinute}) <= strftime('%s', ?)", [$now]]
+            : ["DATE_SUB(tickets.resolution_due_at, INTERVAL tickets.sla_resolution_minutes * {$secondsPerMinute} SECOND) <= ?", [$now]];
+    }
+
+    /**
+     * "Em risco" (D7): ainda no prazo, com `AT_RISK_PERCENT`% ou mais da meta consumida. Sem meta
+     * aplicada não há como medir o consumo, e o chamado segue "No prazo".
+     */
+    private static function atRisk(?int $targetMinutes, CarbonInterface $due, CarbonInterface $now): bool
+    {
+        if ($targetMinutes === null) {
+            return false;
+        }
+
+        $target = $targetMinutes * 60;
+        $remaining = $due->getTimestamp() - $now->getTimestamp();
+
+        return ($target - $remaining) * 100 >= $target * SlaState::AT_RISK_PERCENT;
+    }
+
+    /**
+     * Situação atual do SLA de resolução a partir dos prazos gravados pelo backend.
      * Não estima tempo restante nem calcula prazos: apenas compara os instantes registrados.
+     *
+     * É o estado de conformidade com a meta vigente (RF-16.3). A violação histórica fica à parte, em
+     * `resolution_breached_at` e `first_response_breached_at`: um chamado pode estar "No prazo" depois
+     * de trocar para uma meta mais longa e ainda assim ter uma violação registrada.
      */
     public function slaState(?CarbonInterface $now = null): SlaState
     {
@@ -193,7 +256,11 @@ class Ticket extends Model
             return $this->resolved_at->lte($due) ? SlaState::Met : SlaState::Overdue;
         }
 
-        return $now->gt($due) ? SlaState::Overdue : SlaState::OnTrack;
+        if ($now->gt($due)) {
+            return SlaState::Overdue;
+        }
+
+        return self::atRisk($this->sla_resolution_minutes, $due, $now) ? SlaState::AtRisk : SlaState::OnTrack;
     }
 
     /**
@@ -213,6 +280,10 @@ class Ticket extends Model
             return $this->first_response_at->lte($due) ? SlaState::Met : SlaState::Overdue;
         }
 
-        return $now->gt($due) ? SlaState::Overdue : SlaState::OnTrack;
+        if ($now->gt($due)) {
+            return SlaState::Overdue;
+        }
+
+        return self::atRisk($this->sla_first_response_minutes, $due, $now) ? SlaState::AtRisk : SlaState::OnTrack;
     }
 }

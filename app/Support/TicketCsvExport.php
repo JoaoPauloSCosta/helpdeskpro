@@ -51,7 +51,7 @@ class TicketCsvExport
                 ->select([
                     'tickets.id', 'tickets.ticket_number', 'tickets.title', 'tickets.requester_id',
                     'tickets.department_id', 'tickets.category_id', 'tickets.assigned_to',
-                    'tickets.priority', 'tickets.status', 'tickets.resolution_due_at',
+                    'tickets.priority', 'tickets.status', 'tickets.resolution_due_at', 'tickets.sla_resolution_minutes',
                     'tickets.resolved_at', 'tickets.created_at', 'tickets.updated_at',
                 ])
                 // Uma linha por chamado: só relações "belongsTo", carregadas em bloco, sem junções.

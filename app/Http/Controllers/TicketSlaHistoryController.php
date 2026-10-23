@@ -7,7 +7,9 @@ use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\TicketHistory;
 use App\Models\TicketSlaPause;
+use App\Support\SlaClock;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -22,6 +24,8 @@ class TicketSlaHistoryController extends Controller
         TicketEvent::Resolved,
         TicketEvent::Reopened,
         TicketEvent::Closed,
+        TicketEvent::SlaTargetsChanged,
+        TicketEvent::SlaBreached,
     ];
 
     /**
@@ -29,8 +33,9 @@ class TicketSlaHistoryController extends Controller
      *
      * Tudo vem de registros gravados pelos fluxos operacionais: os períodos de pausa
      * (`ticket_sla_pauses`) e os eventos de auditoria (`ticket_histories`). Nada é gravado, recalculado
-     * ou inferido do status atual. Ainda não há políticas nem motor de SLA (Etapa 7): meta, tempo
-     * consumido e tempo restante não existem nos registros e por isso não são enviados.
+     * ou inferido do status atual. O resumo `sla` traz a meta aplicada, o tempo consumido e o restante,
+     * calculados por SlaClock a partir dos prazos gravados, e as violações já registradas (RN-15), que
+     * seguem no histórico mesmo que a situação atual volte a "No prazo" (RF-16.3).
      *
      * Quem acessa o chamado consulta o histórico; motivo, dados da pendência e autores ficam com a
      * equipe de suporte, como na pendência em andamento da CHA-03.
@@ -40,6 +45,7 @@ class TicketSlaHistoryController extends Controller
         Gate::authorize('view', $ticket);
 
         $support = $request->user()->can('viewPendingDetails', $ticket);
+        $now = now();
 
         $pauses = $ticket->slaPauses()
             ->with($support ? ['author:id,name', 'relatedDepartment:id,name'] : [])
@@ -62,6 +68,7 @@ class TicketSlaHistoryController extends Controller
         return response()
             ->json([
                 'ticket' => $ticket->ticket_number,
+                'sla' => $this->summary($ticket, $now),
                 'pauses' => [
                     'count' => $pauses->count(),
                     // Soma das durações gravadas na retomada; nula se nenhuma pausa foi encerrada.
@@ -76,6 +83,27 @@ class TicketSlaHistoryController extends Controller
             ])
             // Motivos de pendência não devem ficar em caches intermediários.
             ->header('Cache-Control', 'no-store, private');
+    }
+
+    /**
+     * Meta aplicada, consumo e violações. `null` nos números que dependem de política ou de prazo
+     * (chamado sem política, RF-15.3). Chamado resolvido ou encerrado congela o consumo em `resolved_at`.
+     */
+    private function summary(Ticket $ticket, CarbonInterface $now): array
+    {
+        return [
+            'priority' => $ticket->priority->label(),
+            'has_policy' => $ticket->sla_policy_id !== null,
+            'first_response_minutes' => $ticket->sla_first_response_minutes,
+            'resolution_minutes' => $ticket->sla_resolution_minutes,
+            'consumed_seconds' => SlaClock::consumedResolutionSeconds($ticket, $now),
+            'remaining_seconds' => SlaClock::remainingResolutionSeconds($ticket, $now),
+            'effective_seconds' => $ticket->resolution_effective_seconds,
+            'breaches' => [
+                'first_response_at' => $ticket->first_response_breached_at?->toIso8601String(),
+                'resolution_at' => $ticket->resolution_breached_at?->toIso8601String(),
+            ],
+        ];
     }
 
     /** Um período de pausa (RF-17), numerado em ordem cronológica. */
@@ -118,6 +146,9 @@ class TicketSlaHistoryController extends Controller
                 'to' => $new['label'] ?? null,
                 'duration_seconds' => $new['sla_pause']['duration_seconds'] ?? null,
                 'pause_recorded' => isset($new['sla_pause']),
+                // Prazo de resolução estendido pela pausa (RF-17); ausente em chamado sem prazo.
+                'resolution_due_before' => $new['sla_pause']['resolution_due_before'] ?? null,
+                'resolution_due_after' => $new['sla_pause']['resolution_due_after'] ?? null,
             ] : null,
             TicketEvent::PriorityChanged => [
                 'kind' => 'priority_changed',
@@ -127,6 +158,7 @@ class TicketSlaHistoryController extends Controller
             TicketEvent::Resolved => [
                 'kind' => 'resolved',
                 'resolution_due_at' => $new['resolution_due_at'] ?? null,
+                'effective_seconds' => $new['resolution_effective_seconds'] ?? null,
                 // Comparação dos instantes gravados no próprio evento; sem prazo gravado, não há apuração.
                 'on_time' => isset($new['resolution_due_at'], $new['resolved_at'])
                     ? CarbonImmutable::parse($new['resolved_at'])->lte(CarbonImmutable::parse($new['resolution_due_at']))
@@ -135,7 +167,25 @@ class TicketSlaHistoryController extends Controller
             TicketEvent::Reopened => [
                 'kind' => 'reopened',
                 'first_response_due_at' => $new['first_response_due_at'] ?? null,
+                // Prazo já estendido pelo tempo em Resolvido (D3), e o de antes da reabertura.
                 'resolution_due_at' => $new['resolution_due_at'] ?? null,
+                'resolution_due_before' => $new['resolution_due_before'] ?? null,
+            ],
+            TicketEvent::SlaTargetsChanged => [
+                'kind' => 'sla_targets_changed',
+                'from' => $old['priority']['label'] ?? null,
+                'to' => $new['priority']['label'] ?? null,
+                'first_response_minutes' => [$old['first_response_minutes'] ?? null, $new['first_response_minutes'] ?? null],
+                'resolution_minutes' => [$old['resolution_minutes'] ?? null, $new['resolution_minutes'] ?? null],
+                'first_response_due_at' => [$old['first_response_due_at'] ?? null, $new['first_response_due_at'] ?? null],
+                'resolution_due_at' => [$old['resolution_due_at'] ?? null, $new['resolution_due_at'] ?? null],
+                'consumed_seconds' => $new['consumed_seconds'] ?? null,
+            ],
+            TicketEvent::SlaBreached => [
+                'kind' => 'sla_breached',
+                'indicator' => $new['indicator'] ?? null,
+                'due_at' => $new['due_at'] ?? null,
+                'breached_at' => $new['breached_at'] ?? null,
             ],
             TicketEvent::Closed => ['kind' => 'closed'],
             default => null,

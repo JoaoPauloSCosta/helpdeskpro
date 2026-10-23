@@ -43,6 +43,7 @@ class UpdateSlaPolicyRequest extends StoreSlaPolicyRequest
     public function after(): array
     {
         return [
+            $this->validateTargetOrder(...),
             function (Validator $validator) {
                 $target = $this->target();
 

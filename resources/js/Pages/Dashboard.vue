@@ -101,6 +101,20 @@ const sla = computed(() => {
     };
 });
 
+/** Tempo médio com o número de chamados que entraram na média; sem dado, o texto explica o motivo. */
+const averageTime = (stat: { count: number; average_seconds: number | null }, empty: string) =>
+    stat.average_seconds === null
+        ? { value: '—', hint: empty }
+        : { value: formatDuration(stat.average_seconds), hint: `Média de ${plural(stat.count, 'chamado', 'chamados')}.` };
+
+const firstResponseTime = computed(() =>
+    averageTime(props.metrics!.times.first_response, 'Nenhum chamado considerado teve a primeira resposta da equipe.'),
+);
+
+const resolutionTime = computed(() =>
+    averageTime(props.metrics!.times.resolution, 'Nenhum chamado considerado foi resolvido com tempo efetivo registrado.'),
+);
+
 const pending = computed(() => {
     const { closed, closed_seconds: seconds, active } = props.metrics!.pending;
 
@@ -249,6 +263,18 @@ const pending = computed(() => {
                                 hint="Com ao menos uma reabertura pelo solicitante."
                             />
                             <StatCard icon="pause" label="Tempo total em pendência" :value="pending.value" :hint="pending.hint" />
+                            <StatCard
+                                icon="clock"
+                                label="Tempo médio de primeira resposta"
+                                :value="firstResponseTime.value"
+                                :hint="firstResponseTime.hint"
+                            />
+                            <StatCard
+                                icon="check-circle"
+                                label="Tempo médio de resolução"
+                                :value="resolutionTime.value"
+                                :hint="resolutionTime.hint"
+                            />
                         </div>
                     </section>
 

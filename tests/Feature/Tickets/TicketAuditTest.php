@@ -231,6 +231,39 @@ test('events with missing optional fields do not cause errors', function () {
     }
 });
 
+test('SLA target changes and breaches are presented from the recorded values', function () {
+    auditFixture($this->ticket, TicketEvent::SlaTargetsChanged, [
+        'priority' => ['label' => 'Média'],
+        'first_response_minutes' => null,
+        'resolution_minutes' => 480,
+        'resolution_due_at' => '2026-10-21T16:00:00+00:00',
+    ], [
+        'priority' => ['label' => 'Alta'],
+        'first_response_minutes' => 30,
+        'resolution_minutes' => 240,
+        'resolution_due_at' => '2026-10-21T12:00:00+00:00',
+        'consumed_seconds' => 18000,
+    ]);
+    auditFixture($this->ticket, TicketEvent::SlaBreached, null, [
+        'indicator' => 'resolution',
+        'due_at' => '2026-10-21T12:00:00+00:00',
+        'breached_at' => '2026-10-21T12:01:00+00:00',
+    ]);
+
+    [$targets, $breach] = auditEvents($this->manager, $this->ticket);
+
+    expect($targets['title'])->toBe('Metas de SLA recalculadas')
+        ->and($targets['changes'])->toBe([
+            ['field' => 'Prioridade', 'from' => 'Média', 'to' => 'Alta'],
+            ['field' => 'Meta de primeira resposta', 'from' => 'Sem prazo definido', 'to' => '30 min'],
+            ['field' => 'Meta de resolução', 'from' => '480 min', 'to' => '240 min'],
+        ])
+        ->and(auditDetail($targets, 'Tempo de resolução consumido'))->toBe(18000)
+        ->and($breach['title'])->toBe('Resolução fora do prazo')
+        ->and($breach['tone'])->toBe('danger')
+        ->and(auditDetail($breach, 'Prazo violado'))->toBe('2026-10-21T12:00:00+00:00');
+});
+
 test('sensitive keys present in a payload are never returned', function () {
     auditFixture($this->ticket, TicketEvent::StatusChanged, ['label' => 'Pendente', 'password' => 'segredo-antigo'], [
         'label' => 'Em atendimento',

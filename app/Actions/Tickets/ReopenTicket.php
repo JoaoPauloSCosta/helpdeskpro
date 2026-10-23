@@ -20,10 +20,10 @@ use Illuminate\Validation\ValidationException;
  * copiada para o evento; uma nova resolução (CHA-09) a preserva no histórico antes de substituí-la.
  * Identificador, solicitante, responsável, prioridade, categoria e departamento não mudam (RF-13, regra 7).
  *
- * SLA (RF-13, regra 8): ainda não há motor de cálculo (Etapa 7). Nada é reiniciado nem recalculado:
- * prazos, primeira resposta, pausas e violações gravados ficam como estão; o evento guarda os prazos
- * vigentes no momento da reabertura. Como o tempo entre a resolução e a reabertura entra na apuração
- * é uma regra a definir junto do motor de SLA.
+ * SLA (RF-13, regra 8, D3): o SLA não é reiniciado. Metas, prazo de primeira resposta, primeira
+ * resposta, pausas e violações gravados ficam como estão. O tempo em `Resolvido` não conta: o prazo de
+ * resolução é estendido pelo intervalo entre `resolved_at` e a reabertura, e o evento guarda o prazo
+ * antes e depois. Uma nova resolução soma os ciclos no tempo efetivo.
  */
 class ReopenTicket
 {
@@ -55,6 +55,12 @@ class ReopenTicket
             $now = now();
             $previous = $current->status;
 
+            // D3: o atendimento estava concluído entre a resolução e a reabertura.
+            $dueBefore = $current->resolution_due_at;
+            $dueAfter = $dueBefore && $current->resolved_at
+                ? $dueBefore->copy()->addSeconds(max(0, $current->resolved_at->diffInSeconds($now)))
+                : $dueBefore;
+
             $current->histories()->forceCreate([
                 'user_id' => $requester->id,
                 'event_type' => TicketEvent::Reopened,
@@ -70,14 +76,19 @@ class ReopenTicket
                     'label' => TicketStatus::Open->label(),
                     'justification' => $justification,
                     'reopened_at' => $now->toIso8601String(),
-                    // Prazos vigentes na reabertura: o SLA original não é reiniciado (RF-13, regra 8).
+                    // O SLA original não é reiniciado (RF-13, regra 8): o prazo de primeira resposta fica e o de
+                    // resolução vigente é o já estendido pelo tempo em Resolvido (D3).
                     'first_response_due_at' => $current->first_response_due_at?->toIso8601String(),
-                    'resolution_due_at' => $current->resolution_due_at?->toIso8601String(),
+                    'resolution_due_at' => $dueAfter?->toIso8601String(),
+                    ...($dueBefore ? ['resolution_due_before' => $dueBefore->toIso8601String()] : []),
                 ],
                 'created_at' => $now,
             ]);
 
-            $current->forceFill(['status' => TicketStatus::Open])->save();
+            $current->forceFill([
+                'status' => TicketStatus::Open,
+                ...($dueAfter !== $dueBefore ? ['resolution_due_at' => $dueAfter] : []),
+            ])->save();
 
             $ticket->setRawAttributes($current->getAttributes(), true);
         });

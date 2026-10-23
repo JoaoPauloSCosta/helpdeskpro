@@ -81,6 +81,11 @@ class TicketAuditController extends Controller
                 $this->value('Departamento', $new['department']['label'] ?? null),
             ], [
                 $this->detail('Título', $new['title'] ?? null),
+                ($new['sla']['no_policy'] ?? false)
+                    ? $this->detail('SLA', 'Sem política ativa para a prioridade: o chamado abriu sem prazo definido.')
+                    : null,
+                $this->detail('Prazo de primeira resposta', $new['sla']['first_response_due_at'] ?? null, 'datetime'),
+                $this->detail('Prazo de resolução', $new['sla']['resolution_due_at'] ?? null, 'datetime'),
             ]],
             TicketEvent::PriorityChanged => [null, 'primary', null, [$this->change('Prioridade', $old, $new)], []],
             TicketEvent::CategoryChanged => [null, 'primary', null, [$this->change('Categoria', $old, $new)], []],
@@ -100,6 +105,8 @@ class TicketAuditController extends Controller
                 $this->detail('Início da pausa', $new['sla_pause']['started_at'] ?? null, 'datetime'),
                 $this->detail('Fim da pausa', $new['sla_pause']['ended_at'] ?? null, 'datetime'),
                 $this->detail('Duração da pausa', $new['sla_pause']['duration_seconds'] ?? null, 'duration'),
+                $this->detail('Prazo de resolução antes da retomada', $new['sla_pause']['resolution_due_before'] ?? null, 'datetime'),
+                $this->detail('Prazo de resolução depois da retomada', $new['sla_pause']['resolution_due_after'] ?? null, 'datetime'),
             ]],
             TicketEvent::PendingRegistered => [null, 'warning', 'Pausa do SLA de resolução iniciada.', [
                 $this->change('Status', $old, $new),
@@ -118,6 +125,7 @@ class TicketAuditController extends Controller
                 $this->detail('Solução registrada', $new['resolution_summary'] ?? null, 'longtext'),
                 $this->detail('Resolvido em', $new['resolved_at'] ?? null, 'datetime'),
                 $this->detail('Prazo de resolução vigente', $new['resolution_due_at'] ?? null, 'datetime'),
+                $this->detail('Tempo efetivo de resolução', $new['resolution_effective_seconds'] ?? null, 'duration'),
                 // Resolução de um ciclo anterior, substituída por esta (RF-12, regras 6 a 8).
                 $this->detail('Solução anterior', $old['resolution_summary'] ?? null, 'longtext'),
                 $this->detail('Resolução anterior em', $old['resolved_at'] ?? null, 'datetime'),
@@ -126,11 +134,30 @@ class TicketAuditController extends Controller
                 $this->detail('Justificativa', $new['justification'] ?? null, 'longtext'),
                 $this->detail('Solução reaberta', $old['resolution_summary'] ?? null, 'longtext'),
                 $this->detail('Prazo de primeira resposta mantido', $new['first_response_due_at'] ?? null, 'datetime'),
-                $this->detail('Prazo de resolução mantido', $new['resolution_due_at'] ?? null, 'datetime'),
+                $this->detail('Prazo de resolução antes da reabertura', $new['resolution_due_before'] ?? null, 'datetime'),
+                $this->detail('Prazo de resolução depois da reabertura', $new['resolution_due_at'] ?? null, 'datetime'),
             ]],
             TicketEvent::Closed => [null, 'neutral', null, [$this->change('Status', $old, $new)], [
                 $this->detail('Encerrado em', $new['closed_at'] ?? null, 'datetime'),
             ]],
+            TicketEvent::SlaTargetsChanged => [null, 'primary', null, [
+                $this->change('Prioridade', $old['priority'] ?? [], $new['priority'] ?? []),
+                $this->minutes('Meta de primeira resposta', $old['first_response_minutes'] ?? null, $new['first_response_minutes'] ?? null),
+                $this->minutes('Meta de resolução', $old['resolution_minutes'] ?? null, $new['resolution_minutes'] ?? null),
+            ], [
+                $this->detail('Prazo de primeira resposta anterior', $old['first_response_due_at'] ?? null, 'datetime'),
+                $this->detail('Novo prazo de primeira resposta', $new['first_response_due_at'] ?? null, 'datetime'),
+                $this->detail('Prazo de resolução anterior', $old['resolution_due_at'] ?? null, 'datetime'),
+                $this->detail('Novo prazo de resolução', $new['resolution_due_at'] ?? null, 'datetime'),
+                $this->detail('Tempo de resolução consumido', $new['consumed_seconds'] ?? null, 'duration'),
+            ]],
+            TicketEvent::SlaBreached => [
+                ($new['indicator'] ?? null) === 'first_response' ?'Primeira resposta fora do prazo' : 'Resolução fora do prazo',
+                'danger', null, [], [
+                    $this->detail('Prazo violado', $new['due_at'] ?? null, 'datetime'),
+                    $this->detail('Violação registrada em', $new['breached_at'] ?? null, 'datetime'),
+                ],
+            ],
             TicketEvent::CommentAdded, TicketEvent::CommentEdited => $this->commentEvent($event->event_type, $new),
         };
 
@@ -173,6 +200,21 @@ class TicketAuditController extends Controller
     private function change(string $field, array $old, array $new): array
     {
         return ['field' => $field, 'from' => $old['label'] ?? null, 'to' => $new['label'] ?? null];
+    }
+
+    /**
+     * Meta em minutos; "Sem prazo definido" quando o chamado não tinha política (RF-15.3).
+     * Omitida se nenhum dos dois valores foi gravado.
+     */
+    private function minutes(string $field, ?int $old, ?int $new): ?array
+    {
+        if ($old === null && $new === null) {
+            return null;
+        }
+
+        $format = fn (?int $minutes) => $minutes === null ? 'Sem prazo definido' : "{$minutes} min";
+
+        return ['field' => $field, 'from' => $format($old), 'to' => $format($new)];
     }
 
     /** Valor registrado sem valor anterior aplicável (por exemplo, na abertura). */

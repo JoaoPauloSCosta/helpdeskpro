@@ -19,11 +19,12 @@ import {
     type TicketSlaHistory,
     type TicketSlaPauseItem,
 } from '@/lib/ticket';
+import { formatTarget } from '@/lib/sla';
 
 /**
  * Histórico de SLA (CHA-13). Somente leitura: carregado ao expandir a seção e recarregado quando o
  * chamado muda. O backend confere o acesso a cada consulta; nada é calculado ou estimado aqui além
- * da formatação das durações gravadas.
+ * da formatação das durações e dos instantes enviados (metas, consumo e violações vêm do SlaClock).
  */
 const props = defineProps<{ ticket: TicketDetail }>();
 
@@ -87,13 +88,42 @@ const eventTitle: Record<TicketSlaEvent['kind'], string> = {
     resolved: 'Chamado resolvido',
     reopened: 'Chamado reaberto',
     closed: 'Chamado encerrado',
+    sla_targets_changed: 'Metas de SLA recalculadas',
+    sla_breached: 'SLA violado',
 };
+
+/** "Sem prazo definido" quando o chamado não tinha política (RF-15.3). */
+const targetText = (minutes: number | null) => (minutes === null ? 'Sem prazo definido' : formatTarget(minutes));
+
+const breachName = { first_response: 'Primeira resposta', resolution: 'Resolução' } as const;
+
+/** Tempo restante sob a meta vigente; negativo é atraso. */
+const remainingText = (seconds: number | null) => {
+    if (seconds === null) return '—';
+
+    return seconds < 0 ? `Vencido há ${formatDuration(-seconds)}` : seconds === 0 ? 'No limite do prazo' : formatDuration(seconds);
+};
+
+const summary = computed(() => history.value?.sla ?? null);
+
+const breaches = computed(() => {
+    const b = summary.value?.breaches;
+
+    return b
+        ? ([
+              ['Primeira resposta', b.first_response_at],
+              ['Resolução', b.resolution_at],
+          ] as [string, string | null][]).filter(([, at]) => at)
+        : [];
+});
 
 /** Azul: informativo e retomada · laranja: pausa · verde/vermelho: só com prazo gravado no evento. */
 const eventTone = (event: TicketSlaEvent) => {
     switch (event.kind) {
         case 'pause_started':
             return 'warning';
+        case 'sla_breached':
+            return 'danger';
         case 'resolved':
             return event.on_time === null ? 'primary' : event.on_time ? 'success' : 'danger';
         case 'closed':
@@ -157,11 +187,56 @@ const eventTone = (event: TicketSlaEvent) => {
                     <Spinner :size="16" /> Atualizando…
                 </p>
 
-                <!-- Dados parciais: o motor de SLA (políticas e metas) ainda não existe -->
-                <Alert variant="info" title="Dados parciais">
-                    Política aplicada, meta, tempo consumido e tempo restante ainda não são registrados pelo sistema e
-                    por isso não são exibidos. Os prazos e as situações acima vêm somente do que foi gravado.
-                </Alert>
+                <!-- Política aplicada, metas, consumo e violações (RF-15, RF-16, RN-15) -->
+                <section v-if="summary" aria-labelledby="sla-summary-title" class="space-y-3">
+                    <h3 id="sla-summary-title" class="text-base font-medium text-neutral-900">Metas e consumo</h3>
+
+                    <Alert v-if="!summary.has_policy" variant="info" title="Sem prazo definido">
+                        Não havia política de SLA ativa para a prioridade {{ summary.priority }}: o chamado não tem prazo
+                        de primeira resposta nem de resolução.
+                    </Alert>
+
+                    <dl v-else class="grid gap-4 text-sm sm:grid-cols-3">
+                        <div>
+                            <dt class="text-xs font-medium text-neutral-500">Prioridade aplicada</dt>
+                            <dd class="mt-0.5 text-neutral-900">{{ summary.priority }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-neutral-500">Meta de primeira resposta</dt>
+                            <dd class="mt-0.5 text-neutral-900">{{ targetText(summary.first_response_minutes) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-neutral-500">Meta de resolução</dt>
+                            <dd class="mt-0.5 text-neutral-900">{{ targetText(summary.resolution_minutes) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-neutral-500">Tempo de resolução consumido</dt>
+                            <dd class="mt-0.5 text-neutral-900">
+                                {{ summary.consumed_seconds !== null ? formatDuration(summary.consumed_seconds) : '—' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium text-neutral-500">Tempo restante</dt>
+                            <dd
+                                class="mt-0.5"
+                                :class="summary.remaining_seconds !== null && summary.remaining_seconds < 0 ? 'font-medium text-danger-text' : 'text-neutral-900'"
+                            >
+                                {{ remainingText(summary.remaining_seconds) }}
+                            </dd>
+                        </div>
+                        <div v-if="summary.effective_seconds !== null">
+                            <dt class="text-xs font-medium text-neutral-500">Tempo efetivo na última resolução</dt>
+                            <dd class="mt-0.5 text-neutral-900">{{ formatDuration(summary.effective_seconds) }}</dd>
+                        </div>
+                    </dl>
+
+                    <!-- Violações já registradas: o histórico não some quando a meta muda (RF-16.3) -->
+                    <Alert v-if="breaches.length" variant="danger" title="Violações registradas">
+                        <ul class="space-y-0.5">
+                            <li v-for="[name, at] in breaches" :key="name">{{ name }}: {{ formatDateTime(at) }}</li>
+                        </ul>
+                    </Alert>
+                </section>
 
                 <!-- Resumo das pausas: contagens e somas das durações gravadas -->
                 <dl class="grid gap-4 text-sm sm:grid-cols-3">
@@ -272,6 +347,10 @@ const eventTone = (event: TicketSlaEvent) => {
                             <template v-else-if="event.kind === 'resumed'">
                                 <template v-if="event.from && event.to">{{ event.from }} → {{ event.to }}</template>
                                 <p v-if="event.duration_seconds !== null" class="mt-1">Pausa de {{ formatDuration(event.duration_seconds) }}.</p>
+                                <p v-if="event.resolution_due_after" class="mt-1">
+                                    Prazo de resolução: {{ formatDateTime(event.resolution_due_before ?? null) }} →
+                                    {{ formatDateTime(event.resolution_due_after) }}
+                                </p>
                                 <p v-else-if="!event.pause_recorded" class="mt-1 text-neutral-500">Sem período de pausa registrado para esta retomada.</p>
                             </template>
 
@@ -289,17 +368,47 @@ const eventTone = (event: TicketSlaEvent) => {
                                         <Icon :name="event.on_time ? 'check-circle' : 'x-circle'" :size="16" />
                                         {{ event.on_time ? 'Resolvido dentro do prazo' : 'Resolvido após o prazo' }}
                                     </p>
+                                    <p v-if="event.effective_seconds != null" class="mt-1">
+                                        Tempo efetivo de resolução: {{ formatDuration(event.effective_seconds) }}
+                                    </p>
                                 </template>
                                 <span v-else class="text-neutral-500">Sem prazo de resolução registrado no momento da resolução.</span>
                             </template>
 
                             <template v-else-if="event.kind === 'reopened'">
                                 <template v-if="event.resolution_due_at || event.first_response_due_at">
-                                    <p>Prazos mantidos, sem reinício do SLA:</p>
-                                    <p v-if="event.first_response_due_at">Primeira resposta: {{ formatDateTime(event.first_response_due_at) }}</p>
-                                    <p v-if="event.resolution_due_at">Resolução: {{ formatDateTime(event.resolution_due_at) }}</p>
+                                    <p>SLA não reiniciado. O tempo em Resolvido não conta para a resolução:</p>
+                                    <p v-if="event.first_response_due_at">Primeira resposta: {{ formatDateTime(event.first_response_due_at) }} (mantido)</p>
+                                    <p v-if="event.resolution_due_before">
+                                        Resolução: {{ formatDateTime(event.resolution_due_before) }} → {{ formatDateTime(event.resolution_due_at) }}
+                                    </p>
+                                    <p v-else-if="event.resolution_due_at">Resolução: {{ formatDateTime(event.resolution_due_at) }}</p>
                                 </template>
                                 <span v-else class="text-neutral-500">Sem prazos registrados no momento da reabertura.</span>
+                            </template>
+
+                            <template v-else-if="event.kind === 'sla_targets_changed'">
+                                <p v-if="event.from && event.to">{{ event.from }} → {{ event.to }}</p>
+                                <p>
+                                    Primeira resposta: {{ targetText(event.first_response_minutes[0]) }} →
+                                    {{ targetText(event.first_response_minutes[1]) }}
+                                </p>
+                                <p>
+                                    Resolução: {{ targetText(event.resolution_minutes[0]) }} →
+                                    {{ targetText(event.resolution_minutes[1]) }}
+                                </p>
+                                <p v-if="event.resolution_due_at[1]">
+                                    Prazo de resolução: {{ formatDateTime(event.resolution_due_at[0]) }} →
+                                    {{ formatDateTime(event.resolution_due_at[1]) }}
+                                </p>
+                                <p v-if="event.consumed_seconds !== null">
+                                    Tempo já consumido: {{ formatDuration(event.consumed_seconds) }}
+                                </p>
+                            </template>
+
+                            <template v-else-if="event.kind === 'sla_breached'">
+                                <p v-if="event.indicator">{{ breachName[event.indicator] }} fora do prazo.</p>
+                                <p v-if="event.due_at">Prazo violado: {{ formatDateTime(event.due_at) }}</p>
                             </template>
                         </TimelineItem>
                     </Timeline>

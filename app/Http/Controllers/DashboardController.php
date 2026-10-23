@@ -33,8 +33,9 @@ class DashboardController extends Controller
      * não entra em nenhum total, gráfico ou ranking. O período seleciona os chamados abertos nele;
      * os status e prioridades são os atuais desses chamados.
      *
-     * Não calculados (dependem do motor de SLA, ainda inexistente: os prazos e `first_response_at`
-     * não são gravados): tempo médio de primeira resposta e tempo efetivo médio de resolução.
+     * Tempos médios (RF-20), no mesmo escopo e período: primeira resposta (abertura até
+     * `first_response_at`) e resolução efetiva (`resolution_effective_seconds`, sem pausas, dos chamados
+     * resolvidos ou encerrados). Só entram chamados em que o dado existe; sem nenhum, a média é nula.
      */
     public function index(DashboardRequest $request): Response
     {
@@ -113,6 +114,7 @@ class DashboardController extends Controller
                     ->distinct()
                     ->count('ticket_id'),
                 'pending' => $this->pending($tickets()),
+                'times' => $this->times($tickets()),
             ],
         ]);
     }
@@ -169,6 +171,45 @@ class DashboardController extends Controller
         return [
             'items' => $items->take(self::RANKING_SIZE)->all(),
             'others' => $rest->isEmpty() ? null : ['count' => $rest->count(), 'total' => $rest->sum('total')],
+        ];
+    }
+
+    /**
+     * Tempos médios de primeira resposta e de resolução efetiva. A primeira resposta é calculada em
+     * PHP sobre os instantes gravados, sem função de data do banco, para valer em qualquer driver.
+     *
+     * @return array{first_response: array{count: int, average_seconds: int|null}, resolution: array{count: int, average_seconds: int|null}}
+     */
+    private function times(Builder $tickets): array
+    {
+        $count = 0;
+        $sum = 0;
+
+        $responses = (clone $tickets)->toBase()
+            ->whereNotNull('tickets.first_response_at')
+            ->select(['tickets.created_at', 'tickets.first_response_at'])
+            ->cursor();
+
+        foreach ($responses as $row) {
+            $sum += max(0, strtotime($row->first_response_at) - strtotime($row->created_at));
+            $count++;
+        }
+
+        $resolution = (clone $tickets)->toBase()
+            ->whereIn('tickets.status', array_map(fn (TicketStatus $status) => $status->value, TicketStatus::finished()))
+            ->whereNotNull('tickets.resolution_effective_seconds')
+            ->selectRaw('count(*) as total, avg(tickets.resolution_effective_seconds) as average')
+            ->first();
+
+        return [
+            'first_response' => [
+                'count' => $count,
+                'average_seconds' => $count ? (int) round($sum / $count) : null,
+            ],
+            'resolution' => [
+                'count' => (int) $resolution->total,
+                'average_seconds' => $resolution->total ? (int) round($resolution->average) : null,
+            ],
         ];
     }
 

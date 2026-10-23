@@ -45,6 +45,7 @@ class StoreSlaPolicyRequest extends FormRequest
     public function after(): array
     {
         return [
+            $this->validateTargetOrder(...),
             function (Validator $validator) {
                 if ($validator->errors()->hasAny(['priority', 'status']) || $this->input('status') !== 'active') {
                     return;
@@ -57,6 +58,18 @@ class StoreSlaPolicyRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    /** A resolução inclui a primeira resposta: uma meta de resolução menor que a de resposta é incoerente. */
+    protected function validateTargetOrder(Validator $validator): void
+    {
+        if ($validator->errors()->hasAny(['first_response_minutes', 'resolution_minutes'])) {
+            return;
+        }
+
+        if ((int) $this->input('resolution_minutes') < (int) $this->input('first_response_minutes')) {
+            $validator->errors()->add('resolution_minutes', 'A meta de resolução não pode ser menor que a meta de primeira resposta.');
+        }
     }
 
     public static function activeConflictMessage(TicketPriority $priority): string

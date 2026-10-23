@@ -315,7 +315,7 @@ test('invalid filters are rejected', function (string $query, string $field) {
 })->with([
     'unknown status' => ['status=deleted', 'status'],
     'unknown priority' => ['priority=urgent', 'priority'],
-    'unknown SLA' => ['sla=at_risk', 'sla'],
+    'unknown SLA' => ['sla=almost', 'sla'],
     'malformed date' => ['opened_from=21/10/2026', 'opened_from'],
     'inverted period' => ['opened_from=2026-10-20&opened_to=2026-10-10', 'opened_to'],
     'non numeric department' => ['department=abc', 'department'],

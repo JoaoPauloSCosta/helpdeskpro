@@ -253,6 +253,7 @@ test('the history records resolved to open with author, justification and server
             'reopened_at' => now()->toIso8601String(),
             'first_response_due_at' => $firstDue->toIso8601String(),
             'resolution_due_at' => $due->toIso8601String(),
+            'resolution_due_before' => $due->toIso8601String(),
         ]);
 });
 
@@ -407,7 +408,7 @@ test('reopening keeps deadlines, first response, pauses and the previous result'
 
     $ticket = $this->ticket->fresh();
 
-    // Sem motor de SLA (Etapa 7), nada é reiniciado nem recalculado.
+    // Resolvido e reaberto no mesmo instante (D3: intervalo zero), então nada muda; nada é reiniciado.
     foreach ($recorded as $column => $value) {
         expect($ticket->{$column}->equalTo($value))->toBeTrue();
     }

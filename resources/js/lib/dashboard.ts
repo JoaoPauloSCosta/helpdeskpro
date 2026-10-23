@@ -30,6 +30,13 @@ export interface DashboardMetrics {
     };
     /** Chamados com ao menos uma reabertura. */
     reopened: number;
+    /** Tempos médios em segundos; `average_seconds` nulo quando nenhum chamado tem o dado. */
+    times: {
+        /** Da abertura à primeira resposta pública da equipe. */
+        first_response: { count: number; average_seconds: number | null };
+        /** Tempo efetivo de resolução (sem pausas), dos chamados resolvidos ou encerrados. */
+        resolution: { count: number; average_seconds: number | null };
+    };
     pending: {
         /** Pendências encerradas e a soma das suas durações. */
         closed: number;

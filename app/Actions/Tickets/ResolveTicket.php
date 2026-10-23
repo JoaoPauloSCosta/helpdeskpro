@@ -6,6 +6,7 @@ use App\Enums\TicketEvent;
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Support\SlaClock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -19,9 +20,11 @@ use Illuminate\Validation\ValidationException;
  * resolução anterior que estiver sendo substituída: depois de uma reabertura (CHA-10), uma nova
  * resolução não apaga a rastreabilidade das anteriores (RF-12, regras 6 a 8).
  *
- * SLA: ainda não há motor de cálculo (Etapa 7). A resolução grava somente `resolved_at`; a situação
- * do SLA de resolução continua sendo a comparação de Ticket::slaState() entre esse instante e o
- * prazo gravado. Nenhum prazo, primeira resposta ou violação é alterado aqui.
+ * SLA (RF-15, RN-15): além de `resolved_at`, grava `resolution_effective_seconds`, o tempo de
+ * resolução sem as pausas e sem o tempo em `Resolvido` (soma os ciclos de uma reabertura), e registra a
+ * violação se a resolução passou do prazo. Só há tempo efetivo quando o chamado tem meta aplicada. O
+ * prazo e a primeira resposta não mudam; a situação do SLA continua sendo a comparação de
+ * Ticket::slaState() entre `resolved_at` e o prazo vigente.
  */
 class ResolveTicket
 {
@@ -61,6 +64,9 @@ class ResolveTicket
             $now = now();
             $previous = $current->status;
 
+            // Calculado com o relógio ainda correndo, antes de o status passar a Resolvido.
+            $effectiveSeconds = SlaClock::consumedResolutionSeconds($current, $now);
+
             $current->histories()->forceCreate([
                 'user_id' => $editor->id,
                 'event_type' => TicketEvent::Resolved,
@@ -80,6 +86,7 @@ class ResolveTicket
                     'resolved_at' => $now->toIso8601String(),
                     // Prazo vigente no momento da resolução, para a apuração não depender do estado futuro.
                     'resolution_due_at' => $current->resolution_due_at?->toIso8601String(),
+                    ...($effectiveSeconds !== null ? ['resolution_effective_seconds' => $effectiveSeconds] : []),
                 ],
                 'created_at' => $now,
             ]);
@@ -88,7 +95,10 @@ class ResolveTicket
                 'status' => TicketStatus::Resolved,
                 'resolution_summary' => $summary,
                 'resolved_at' => $now,
+                'resolution_effective_seconds' => $effectiveSeconds,
             ])->save();
+
+            SlaClock::recordBreaches($current, $now);
 
             $ticket->setRawAttributes($current->getAttributes(), true);
         });

@@ -18,6 +18,7 @@ use App\Models\TicketComment;
 use App\Models\TicketSlaPause;
 use App\Models\User;
 use App\Policies\TicketPolicy;
+use App\Support\SlaClock;
 use App\Support\TicketListingQuery;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -63,7 +64,7 @@ class TicketController extends Controller
             ->select([
                 'tickets.id', 'tickets.ticket_number', 'tickets.title', 'tickets.requester_id',
                 'tickets.department_id', 'tickets.category_id', 'tickets.assigned_to',
-                'tickets.priority', 'tickets.status', 'tickets.resolution_due_at',
+                'tickets.priority', 'tickets.status', 'tickets.resolution_due_at', 'tickets.sla_resolution_minutes',
                 'tickets.resolved_at', 'tickets.created_at', 'tickets.updated_at',
             ])
             ->with(['requester:id,name', 'assignee:id,name', 'department:id,name', 'category:id,name'])
@@ -231,12 +232,19 @@ class TicketController extends Controller
                 'created_at' => $ticket->created_at?->toIso8601String(),
                 'updated_at' => $ticket->updated_at?->toIso8601String(),
             ],
-            // Somente instantes gravados pelo backend; sem motor de SLA, os prazos ficam nulos.
+            // Calculado no backend (SlaClock) a partir dos instantes gravados; sem política, tudo nulo.
+            // `remaining_seconds` negativo: vencido há esse tempo. `breached_at` é o histórico (RN-15),
+            // independente da situação atual.
             'sla' => [
                 'firstResponse' => [
                     'state' => $ticket->firstResponseSlaState($now)->value,
                     'due_at' => $ticket->first_response_due_at?->toIso8601String(),
                     'met_at' => $ticket->first_response_at?->toIso8601String(),
+                    'target_minutes' => $ticket->sla_first_response_minutes,
+                    'remaining_seconds' => $ticket->first_response_due_at
+                        ? $ticket->first_response_due_at->getTimestamp() - ($ticket->first_response_at ?? $now)->getTimestamp()
+                        : null,
+                    'breached_at' => $ticket->first_response_breached_at?->toIso8601String(),
                 ],
                 'resolution' => [
                     'state' => $ticket->slaState($now)->value,
@@ -245,6 +253,9 @@ class TicketController extends Controller
                     'met_at' => in_array($ticket->status, TicketStatus::finished(), true)
                         ? $ticket->resolved_at?->toIso8601String()
                         : null,
+                    'target_minutes' => $ticket->sla_resolution_minutes,
+                    'remaining_seconds' => SlaClock::remainingResolutionSeconds($ticket, $now),
+                    'breached_at' => $ticket->resolution_breached_at?->toIso8601String(),
                 ],
             ],
             'comments' => $comments,

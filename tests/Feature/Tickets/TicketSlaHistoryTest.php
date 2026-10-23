@@ -174,7 +174,7 @@ test('each waiting status is shown as a pause and its resume as a resume', funct
     'pendente departamentos' => TicketStatus::PendingDepartments,
 ]);
 
-test('the resume records the paused interval and does not move or restart the recorded deadlines', function () {
+test('the resume records the paused interval, extends the resolution deadline and keeps the first response deadline', function () {
     $deadlines = [
         'first_response_due_at' => Carbon::parse('2026-10-21 10:00:00'),
         'resolution_due_at' => Carbon::parse('2026-10-21 16:00:00'),
@@ -193,7 +193,8 @@ test('the resume records the paused interval and does not move or restart the re
     ])
         ->and($history['events'][0]['duration_seconds'])->toBe(9000)
         ->and($ticket->first_response_due_at->equalTo($deadlines['first_response_due_at']))->toBeTrue()
-        ->and($ticket->resolution_due_at->equalTo($deadlines['resolution_due_at']))->toBeTrue();
+        // 16:00 + 2h30 parados (RF-17).
+        ->and($ticket->resolution_due_at->toDateTimeString())->toBe('2026-10-21 18:30:00');
 });
 
 test('each pause cycle is kept as an individual period', function () {
@@ -229,7 +230,9 @@ test('a pause in progress has no end nor duration and is left out of the closed 
 
 /* ---------- Reabertura, prioridade e violações ---------- */
 
-test('reopening keeps the previous deadlines, pauses and the late resolution', function () {
+test('reopening keeps the first response deadline, the pauses and the late resolution, and extends the resolution deadline', function () {
+    // Prazo de 12:00, estendido para 13:00 pela pausa de 1h; resolvido às 14:00, fora do prazo.
+    // Reaberto 19h depois: o tempo em Resolvido não conta (D3), então o prazo vai para 08:00 do dia seguinte.
     $this->ticket->forceFill(['resolution_due_at' => Carbon::parse('2026-10-21 12:00:00')])->save();
     slaPauseCycle($this->tech, $this->ticket, '09:00', '10:00');
     $this->travelTo(Carbon::parse('2026-10-21 14:00:00'));
@@ -240,28 +243,34 @@ test('reopening keeps the previous deadlines, pauses and the late resolution', f
 
     $history = slaHistory($this->requester, $this->ticket);
 
-    expect(array_column($history['events'], 'kind'))->toBe(['reopened', 'resolved', 'resumed', 'pause_started'])
+    expect(array_column($history['events'], 'kind'))->toBe(['reopened', 'sla_breached', 'resolved', 'resumed', 'pause_started'])
         ->and($history['events'][0])->toMatchArray([
-            'resolution_due_at' => '2026-10-21T12:00:00+00:00',
+            'resolution_due_at' => '2026-10-22T08:00:00+00:00',
+            'resolution_due_before' => '2026-10-21T13:00:00+00:00',
             'first_response_due_at' => null,
         ])
         ->and($history['events'][1])->toMatchArray([
-            'resolution_due_at' => '2026-10-21T12:00:00+00:00',
+            'indicator' => 'resolution',
+            'due_at' => '2026-10-21T13:00:00+00:00',
+        ])
+        ->and($history['events'][2])->toMatchArray([
+            'resolution_due_at' => '2026-10-21T13:00:00+00:00',
             'on_time' => false,
         ])
         ->and($history['pauses']['items'])->toHaveCount(1)
         ->and($history['pauses']['closed_seconds'])->toBe(3600)
-        ->and($this->ticket->fresh()->resolution_due_at->toDateTimeString())->toBe('2026-10-21 12:00:00');
+        ->and($this->ticket->fresh()->resolution_due_at->toDateTimeString())->toBe('2026-10-22 08:00:00');
 });
 
 test('a priority change keeps the time already paused, the deadlines and earlier violations', function () {
     $this->ticket->forceFill(['resolution_due_at' => Carbon::parse('2026-10-21 12:00:00')])->save();
+    // Prazo de 12:00, estendido para 13:30 pela pausa de 1h30; resolvido às 14:00, fora do prazo.
     slaPauseCycle($this->tech, $this->ticket, '09:00', '10:30');
-    $this->travelTo(Carbon::parse('2026-10-21 13:00:00'));
+    $this->travelTo(Carbon::parse('2026-10-21 14:00:00'));
     slaResolve($this->tech, $this->ticket);
     $ticket = $this->ticket->fresh();
     app(ReopenTicket::class)($this->requester, $ticket, $ticket->status, 'Ainda ocorre.');
-    $this->travelTo(Carbon::parse('2026-10-21 14:00:00'));
+    $this->travelTo(Carbon::parse('2026-10-21 15:00:00'));
     $ticket = $this->ticket->fresh();
     app(UpdateTicketAttributes::class)($this->tech, $ticket, ['priority' => TicketPriority::Critical->value], $ticket->editVersion());
 
@@ -270,7 +279,7 @@ test('a priority change keeps the time already paused, the deadlines and earlier
     expect($history['events'][0])->toMatchArray(['kind' => 'priority_changed', 'from' => 'Alta', 'to' => 'Crítica'])
         ->and(collect($history['events'])->firstWhere('kind', 'resolved')['on_time'])->toBeFalse()
         ->and($history['pauses']['closed_seconds'])->toBe(5400)
-        ->and($this->ticket->fresh()->resolution_due_at->toDateTimeString())->toBe('2026-10-21 12:00:00');
+        ->and($this->ticket->fresh()->resolution_due_at->toDateTimeString())->toBe('2026-10-21 13:30:00');
 });
 
 test('the resolution outcome comes only from the deadline recorded in the resolution event', function (?string $due, ?bool $onTime) {
@@ -281,7 +290,8 @@ test('the resolution outcome comes only from the deadline recorded in the resolu
     // Alterar o prazo do chamado depois não reescreve a apuração gravada no evento.
     $this->ticket->fresh()->forceFill(['resolution_due_at' => Carbon::parse('2030-01-01 00:00:00')])->save();
 
-    $event = slaHistory($this->tech, $this->ticket)['events'][0];
+    // Resolvido após o prazo, a violação é registrada logo depois do evento de resolução.
+    $event = collect(slaHistory($this->tech, $this->ticket)['events'])->firstWhere('kind', 'resolved');
 
     expect($event['kind'])->toBe('resolved')
         ->and($event['on_time'])->toBe($onTime)
@@ -318,6 +328,16 @@ test('closing is shown and keeps the earlier SLA records', function () {
 test('a ticket without SLA records returns an empty history', function () {
     expect(slaHistory($this->requester, $this->ticket))->toBe([
         'ticket' => $this->ticket->ticket_number,
+        'sla' => [
+            'priority' => 'Alta',
+            'has_policy' => false,
+            'first_response_minutes' => null,
+            'resolution_minutes' => null,
+            'consumed_seconds' => null,
+            'remaining_seconds' => null,
+            'effective_seconds' => null,
+            'breaches' => ['first_response_at' => null, 'resolution_at' => null],
+        ],
         'pauses' => ['count' => 0, 'closed_seconds' => null, 'items' => []],
         'events' => [],
     ]);

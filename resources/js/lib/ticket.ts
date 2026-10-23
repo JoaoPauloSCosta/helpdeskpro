@@ -101,13 +101,52 @@ export interface TicketDetail {
     updated_at: string | null;
 }
 
-/** Um indicador de SLA calculado no backend. `none`: ainda não há prazo gravado. */
+/** Um indicador de SLA calculado no backend. `none`: o chamado não tem prazo (sem política, RF-15.3). */
 export interface TicketSlaIndicator {
-    state: Exclude<SlaState, 'at_risk'> | 'none';
+    state: SlaState | 'none';
     due_at: string | null;
     /** Instante em que a meta foi atingida (primeira resposta ou resolução). */
     met_at: string | null;
+    /** Meta aplicada ao chamado, em minutos. */
+    target_minutes: number | null;
+    /** Segundos até o prazo; negativo quando vencido. Com a meta atingida, é a folga (ou o atraso) dela. */
+    remaining_seconds: number | null;
+    /** Primeira violação registrada (RN-15). Permanece mesmo que a situação atual volte a "No prazo". */
+    breached_at: string | null;
 }
+
+/** Texto da etiqueta do indicador: "Vencido há 35 min" só enquanto o prazo está vencido e aberto (design-system 3.3). */
+export const slaBadgeLabel = (sla: TicketSlaIndicator): string | undefined => {
+    if (sla.remaining_seconds === null) return undefined;
+
+    if (sla.state === 'overdue' && sla.met_at === null) return `Vencido há ${formatDuration(Math.abs(sla.remaining_seconds))}`;
+
+    // Em risco: com 80% da meta consumida (D7), a etiqueta diz quanto falta.
+    if (sla.state === 'at_risk') return `Vence em ${formatDuration(sla.remaining_seconds)}`;
+
+    return undefined;
+};
+
+/** Linha complementar do indicador (tempo restante, folga ou atraso); vazia quando não há o que dizer. */
+export const slaDetailText = (sla: TicketSlaIndicator): string | null => {
+    if (sla.remaining_seconds === null) return null;
+
+    const time = formatDuration(Math.abs(sla.remaining_seconds));
+
+    switch (sla.state) {
+        case 'on_track':
+        case 'at_risk':
+            return `Restam ${time}`;
+        case 'paused':
+            return `Restam ${time} (contagem pausada)`;
+        case 'met':
+            return sla.remaining_seconds === 0 ? 'Concluído no limite do prazo' : `Concluído ${time} antes do prazo`;
+        case 'overdue':
+            return sla.met_at !== null ? `Concluído ${time} depois do prazo` : null;
+        default:
+            return null;
+    }
+};
 
 /** Mensagem do chamado (RF-11). Notas internas só chegam a quem pode lê-las. */
 export interface TicketCommentItem {
@@ -327,6 +366,9 @@ export type TicketSlaEvent = TicketSlaEventBase &
               duration_seconds: number | null;
               /** `false`: pausa anterior ao registro de pendências, sem período gravado. */
               pause_recorded: boolean;
+              /** Prazo de resolução antes e depois da retomada; nulos sem prazo ou sem pausa registrada. */
+              resolution_due_before?: string | null;
+              resolution_due_after?: string | null;
           }
         | { kind: 'priority_changed'; from: TicketPriority | null; to: TicketPriority | null }
         | {
@@ -334,14 +376,46 @@ export type TicketSlaEvent = TicketSlaEventBase &
               resolution_due_at: string | null;
               /** `null`: não havia prazo gravado no momento da resolução. */
               on_time: boolean | null;
+              /** Tempo efetivo de resolução, sem pausas; nulo sem meta aplicada. */
+              effective_seconds?: number | null;
           }
-        | { kind: 'reopened'; first_response_due_at: string | null; resolution_due_at: string | null }
+        | {
+              kind: 'reopened';
+              first_response_due_at: string | null;
+              /** Já estendido pelo tempo em Resolvido. */
+              resolution_due_at: string | null;
+              resolution_due_before?: string | null;
+          }
         | { kind: 'closed' }
+        | {
+              kind: 'sla_targets_changed';
+              from: TicketPriority | null;
+              to: TicketPriority | null;
+              /** [antes, depois]; nulos quando o chamado não tinha política (RF-15.3). */
+              first_response_minutes: [number | null, number | null];
+              resolution_minutes: [number | null, number | null];
+              first_response_due_at: [string | null, string | null];
+              resolution_due_at: [string | null, string | null];
+              consumed_seconds: number | null;
+          }
+        | { kind: 'sla_breached'; indicator: 'first_response' | 'resolution' | null; due_at: string | null; breached_at: string | null }
     );
 
 /** Histórico de SLA do chamado (CHA-13), carregado sob demanda. Eventos e pausas do mais recente ao mais antigo. */
 export interface TicketSlaHistory {
     ticket: string;
+    /** Meta aplicada, consumo e violações registradas. Números nulos: chamado sem política ou sem prazo. */
+    sla: {
+        priority: TicketPriority;
+        has_policy: boolean;
+        first_response_minutes: number | null;
+        resolution_minutes: number | null;
+        consumed_seconds: number | null;
+        remaining_seconds: number | null;
+        /** Tempo efetivo gravado na última resolução. */
+        effective_seconds: number | null;
+        breaches: { first_response_at: string | null; resolution_at: string | null };
+    };
     pauses: {
         count: number;
         /** Soma das pausas encerradas; `null` se nenhuma foi encerrada. */
