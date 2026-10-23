@@ -13,10 +13,9 @@ use Illuminate\Support\Facades\DB;
  * na mesma transação: um `SlaPolicyUpdated` com as metas alteradas e, se a situação mudar, um
  * `SlaPolicyDeactivated` ou `SlaPolicyActivated`.
  *
- * A prioridade não é editável: ela identifica a política. Nenhum chamado é tocado — hoje os chamados
- * não guardam a política nem prazos calculados a partir dela (Etapa 7 do PRD). Quando o motor de SLA
- * existir, ele deverá registrar as metas aplicadas no chamado (RF-15.3), para que editar uma política
- * não altere o histórico.
+ * A prioridade não é editável: ela identifica a política. Nenhum chamado é tocado: cada chamado guarda
+ * a cópia das metas aplicadas na abertura ou na última troca de prioridade (RF-15.3), então editar uma
+ * política só vale para os chamados abertos depois dela.
  */
 class UpdateSlaPolicy
 {

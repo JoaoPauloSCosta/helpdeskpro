@@ -192,6 +192,19 @@ test('the limits accept values at the boundary', function () {
         ->toBe(['first_response_minutes' => 1, 'resolution_minutes' => 525600]);
 });
 
+test('the resolution target cannot be shorter than the first response target', function () {
+    $this->actingAs($this->admin)
+        ->post('/sla-policies', newSlaPolicyData(['first_response_minutes' => '30', 'resolution_minutes' => '29']))
+        ->assertSessionHasErrors(['resolution_minutes' => 'A meta de resolução não pode ser menor que a meta de primeira resposta.']);
+
+    expect(SlaPolicy::count())->toBe(0);
+
+    // Metas iguais são aceitas.
+    $this->actingAs($this->admin)
+        ->post('/sla-policies', newSlaPolicyData(['first_response_minutes' => '30', 'resolution_minutes' => '30']))
+        ->assertSessionHasNoErrors();
+});
+
 test('validation messages are in Portuguese', function () {
     $this->actingAs($this->admin)
         ->post('/sla-policies', newSlaPolicyData(['resolution_minutes' => '']))

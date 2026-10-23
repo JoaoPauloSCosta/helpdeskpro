@@ -275,7 +275,7 @@ test('a concurrent change is not overwritten', function () {
 
 /* ---------- SLA ---------- */
 
-test('changing the priority keeps SLA deadlines, first response and violations untouched', function () {
+test('changing the priority of a ticket without an applied policy keeps deadlines and first response and records the overdue violations', function () {
     $deadlines = [
         'first_response_due_at' => now()->subHours(3)->startOfSecond(),
         'first_response_at' => now()->subHours(2)->startOfSecond(),
@@ -287,13 +287,17 @@ test('changing the priority keeps SLA deadlines, first response and violations u
 
     $ticket = $this->ticket->fresh();
 
-    // Sem motor de SLA (Etapa 7), nada é recalculado: os instantes gravados e a violação se mantêm.
+    // Sem política na nova prioridade nem meta aplicada, nada é recalculado (D2): os instantes gravados
+    // se mantêm e as violações já vencidas ficam registradas (RF-16.3).
     foreach ($deadlines as $column => $value) {
         expect($ticket->{$column}->equalTo($value))->toBeTrue();
     }
     expect($ticket->slaState()->value)->toBe('overdue')
         ->and($ticket->firstResponseSlaState()->value)->toBe('overdue')
-        ->and(TicketHistory::sole()->old_values['priority'])->toBe('medium');
+        ->and($ticket->first_response_breached_at)->not->toBeNull()
+        ->and($ticket->resolution_breached_at)->not->toBeNull()
+        ->and(TicketHistory::where('event_type', TicketEvent::PriorityChanged)->sole()->old_values['priority'])->toBe('medium')
+        ->and(TicketHistory::where('event_type', TicketEvent::SlaTargetsChanged)->count())->toBe(0);
 });
 
 /* ---------- Histórico nos detalhes ---------- */

@@ -365,7 +365,7 @@ test('resolving keeps deadlines and first response and compares the stored insta
 
     $ticket = $this->ticket->fresh();
 
-    // Sem motor de SLA (Etapa 7), nenhum prazo é recalculado: só `resolved_at` é gravado.
+    // Resolver não recalcula prazo nem primeira resposta; só `resolved_at` e o tempo efetivo são gravados.
     foreach ($recorded as $column => $value) {
         expect($ticket->{$column}->equalTo($value))->toBeTrue();
     }

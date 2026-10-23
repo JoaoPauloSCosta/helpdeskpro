@@ -19,9 +19,9 @@ use Illuminate\Validation\ValidationException;
  * responsável, comentários, pendências e histórico ficam como estão. O PRD não prevê justificativa
  * para o encerramento.
  *
- * SLA: ainda não há motor de cálculo (Etapa 7). Nenhum prazo, primeira resposta, pausa ou violação é
- * alterado; a situação do SLA de resolução continua sendo apurada por Ticket::slaState() com o
- * instante da resolução, e não com o do encerramento.
+ * SLA: o encerramento não mexe em prazo, tempo efetivo, primeira resposta, pausa nem violação. A
+ * situação do SLA de resolução é apurada por Ticket::slaState() com o instante da resolução
+ * (`resolved_at`), e não com o do encerramento; o tempo em `Resolvido` não conta (D3).
  */
 class CloseTicket
 {

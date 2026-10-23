@@ -29,6 +29,8 @@ import SlaHistory from '@/Pages/Tickets/Partials/SlaHistory.vue';
 import {
     formatDate,
     formatDateTime,
+    slaBadgeLabel,
+    slaDetailText,
     type TicketActivePending,
     type TicketCloseForm,
     type TicketClosure,
@@ -43,6 +45,7 @@ import {
     type TicketTechnician,
     type TicketSlaIndicator,
 } from '@/lib/ticket';
+import { formatTarget } from '@/lib/sla';
 
 const props = defineProps<{
     ticket: TicketDetail;
@@ -317,10 +320,22 @@ const commentCount = computed(() =>
                     >
                         <p class="text-sm font-medium text-neutral-700">SLA de {{ card.title.toLowerCase() }}</p>
                         <div class="mt-2">
-                            <SlaIndicator v-if="card.data.state !== 'none'" :state="card.data.state" />
+                            <SlaIndicator
+                                v-if="card.data.state !== 'none'"
+                                :state="card.data.state"
+                                :label="slaBadgeLabel(card.data)"
+                            />
                             <span v-else class="text-sm text-neutral-500">Sem prazo definido</span>
                         </div>
-                        <dl v-if="card.data.due_at || card.data.met_at" class="mt-2 space-y-0.5 text-xs text-neutral-600">
+                        <p v-if="slaDetailText(card.data)" class="mt-1 text-xs text-neutral-600">{{ slaDetailText(card.data) }}</p>
+                        <dl
+                            v-if="card.data.due_at || card.data.met_at || card.data.target_minutes"
+                            class="mt-2 space-y-0.5 text-xs text-neutral-600"
+                        >
+                            <div v-if="card.data.target_minutes" class="flex gap-1">
+                                <dt>Meta:</dt>
+                                <dd>{{ formatTarget(card.data.target_minutes) }}</dd>
+                            </div>
                             <div v-if="card.data.due_at" class="flex gap-1">
                                 <dt>Prazo:</dt>
                                 <dd>{{ formatDateTime(card.data.due_at) }}</dd>
@@ -330,6 +345,10 @@ const commentCount = computed(() =>
                                 <dd>{{ formatDateTime(card.data.met_at) }}</dd>
                             </div>
                         </dl>
+                        <!-- Histórico de violação (RN-15): não some quando uma meta mais longa devolve o chamado ao prazo -->
+                        <p v-if="card.data.breached_at" class="mt-2 flex items-center gap-1 text-xs font-medium text-danger-text">
+                            <Icon name="x-circle" :size="16" /> Violação registrada em {{ formatDateTime(card.data.breached_at) }}
+                        </p>
                     </div>
                 </div>
 

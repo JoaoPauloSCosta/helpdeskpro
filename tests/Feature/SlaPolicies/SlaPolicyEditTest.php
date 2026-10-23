@@ -49,6 +49,18 @@ test('guests are redirected to login', function () {
     $this->patch("/sla-policies/{$this->policy->id}", slaPolicyEditData($this->policy))->assertRedirect('/login');
 });
 
+test('the resolution target cannot be edited to less than the first response target', function () {
+    $this->actingAs($this->admin)
+        ->patch("/sla-policies/{$this->policy->id}", slaPolicyEditData($this->policy, ['resolution_minutes' => '59']))
+        ->assertSessionHasErrors(['resolution_minutes' => 'A meta de resolução não pode ser menor que a meta de primeira resposta.']);
+
+    expect($this->policy->fresh()->resolution_minutes)->toBe(480);
+
+    $this->actingAs($this->admin)
+        ->patch("/sla-policies/{$this->policy->id}", slaPolicyEditData($this->policy, ['resolution_minutes' => '60']))
+        ->assertSessionHasNoErrors();
+});
+
 test('users without sla.manage can neither view nor edit', function (string $role) {
     $user = User::factory()->withRole($role)->create();
 

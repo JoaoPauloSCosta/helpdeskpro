@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Política de SLA (RF-15.3): metas de primeira resposta e de resolução, em minutos corridos,
  * para uma prioridade. Só pode haver uma ativa por prioridade (índice único em `active_priority`).
- * Ainda não há motor de SLA usando estas metas (Etapa 7 do PRD).
+ * O motor de SLA (App\Support\SlaClock) aplica estas metas na abertura do chamado e na troca de prioridade.
  */
 class SlaPolicy extends Model
 {
