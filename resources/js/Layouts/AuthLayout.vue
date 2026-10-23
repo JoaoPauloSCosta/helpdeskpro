@@ -30,7 +30,11 @@ defineProps<{
             />
 
             <div class="w-full max-w-sm">
-                <BrandMark tone="light" class="mb-10 justify-center" />
+                <img
+                    src="/images/logo-light.png"
+                    alt="Help Desk Pro"
+                    class="mx-auto mb-10 h-auto w-64"
+                />
 
                 <p
                     class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/95"

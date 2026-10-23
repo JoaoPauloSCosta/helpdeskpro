@@ -26,7 +26,7 @@ class DashboardController extends Controller
     private const RANKING_SIZE = 8;
 
     /**
-     * IND-01 — Dashboard operacional (RF-20). Somente leitura.
+     * IND-01 — Visão Geral (RF-20). Somente leitura.
      *
      * Todos os indicadores partem do mesmo escopo da listagem (Ticket::scopeVisibleTo()), aplicado
      * antes do período e de qualquer agregação: um chamado que o usuário não consulta na CHA-01

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
@@ -91,10 +91,21 @@ const props = defineProps<{
 const page = usePage();
 const toast = useToast();
 
-/** Confirmação da abertura (CHA-02), com o identificador gerado pelo servidor. */
-const justCreated = computed(() => page.props.flash?.ticketCreated === props.ticket.number);
-/** Confirmação vinda de outra tela, como a edição (CHA-04). */
-const successMessage = computed(() => page.props.flash?.success ?? null);
+/**
+ * Confirmações da abertura (CHA-02, com o identificador gerado pelo servidor) e das
+ * alterações no chamado. Cada resposta traz um novo `flash`, então ações repetidas
+ * voltam a notificar; recargas parciais mantêm o objeto e não repetem o toast.
+ */
+watch(
+    () => page.props.flash,
+    (flash) => {
+        if (flash?.ticketCreated === props.ticket.number) {
+            toast.success(`Chamado ${props.ticket.number} aberto com sucesso.`);
+        }
+        if (flash?.success) toast.success(flash.success);
+    },
+    { immediate: true },
+);
 
 /* ---------- Atribuição (CHA-05) ---------- */
 
@@ -293,15 +304,7 @@ const commentCount = computed(() =>
                 </div>
             </div>
 
-            <Alert v-if="successMessage" variant="success">{{ successMessage }}</Alert>
             <Alert v-if="selfAssignError" variant="warning" title="Não foi possível assumir o chamado">{{ selfAssignError }}</Alert>
-
-            <Alert v-if="justCreated" variant="success" title="Chamado aberto com sucesso">
-                <p class="flex flex-wrap items-center gap-x-1">
-                    Seu chamado foi registrado com o identificador
-                    <TicketNumber :number="ticket.number" />.
-                </p>
-            </Alert>
 
             <!-- SLA: somente o que o backend registrou; nada é estimado no navegador -->
             <section aria-labelledby="sla-title" class="space-y-4">

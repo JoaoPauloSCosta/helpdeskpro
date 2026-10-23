@@ -7,7 +7,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Período do dashboard operacional (IND-01). Usa os mesmos parâmetros e regras do filtro de
+ * Período do Visão Geral (IND-01). Usa os mesmos parâmetros e regras do filtro de
  * abertura da listagem (RF-07), para que os atalhos do dashboard levem à mesma seleção de chamados.
  * O período só restringe os chamados considerados; o escopo de acesso é aplicado no controller.
  */

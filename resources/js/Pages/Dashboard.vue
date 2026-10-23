@@ -122,11 +122,11 @@ const pending = computed(() => {
 </script>
 
 <template>
-    <Head title="Dashboard operacional" />
+    <Head title="Visão Geral" />
 
     <AuthenticatedLayout>
         <div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-            <PageHeader title="Dashboard operacional" :subtitle="scopeLabel">
+            <PageHeader title="Visão Geral" :subtitle="scopeLabel">
                 <p class="text-xs text-neutral-500">Atualizado em {{ formatDateTime(generatedAt) }}</p>
                 <Button variant="secondary" :loading="processing" @click="refresh">
                     <Icon v-if="!processing" name="arrow-path" :size="16" /> Atualizar

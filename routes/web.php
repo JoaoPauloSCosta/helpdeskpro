@@ -37,7 +37,7 @@ if (app()->environment('local')) {
     Route::get('/design-system', fn () => Inertia::render('DesignSystem'))->name('design-system');
 }
 
-// IND-01 — Dashboard operacional (RF-20): indicadores restritos ao escopo da listagem de chamados.
+// IND-01 — Visão Geral (RF-20): indicadores restritos ao escopo da listagem de chamados.
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function () {

@@ -12,16 +12,18 @@ withDefaults(
 
 <template>
     <div class="flex items-center gap-3">
+        <img
+            v-if="tone === 'default'"
+            src="/images/logo-icon.png"
+            alt=""
+            class="h-9 w-9 shrink-0 rounded-lg"
+        />
         <span
-            class="grid shrink-0 place-items-center rounded-lg border"
-            :class="
-                tone === 'light'
-                    ? 'h-11 w-11 border-white/75 bg-white/15 text-white shadow-md'
-                    : 'h-9 w-9 border-primary-100 bg-primary-50 text-primary-600'
-            "
+            v-else
+            class="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-white/75 bg-white/15 text-white shadow-md"
             aria-hidden="true"
         >
-            <Icon name="headset" :size="tone === 'light' ? 24 : 20" />
+            <Icon name="headset" :size="24" />
         </span>
         <span
             class="font-extrabold leading-none tracking-tight"

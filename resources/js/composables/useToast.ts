@@ -20,8 +20,8 @@ const push = (variant: ToastVariant, message: string) => {
     const id = nextId++;
     toasts.push({ id, variant, message });
 
-    // Erros permanecem até serem fechados (design-system.md, seção 6.5).
-    if (variant !== 'danger') setTimeout(() => dismiss(id), 5000);
+    // Todas as variantes, inclusive erros, somem após 5s (design-system.md, seção 6.5).
+    setTimeout(() => dismiss(id), 5000);
 
     return id;
 };

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, watch } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
@@ -13,6 +13,7 @@ import StatusBadge from '@/Components/StatusBadge.vue';
 import TextInput from '@/Components/TextInput.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
 import { useLeaveGuard } from '@/composables/useLeaveGuard';
+import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import type { Option, TicketPriority, TicketStatus } from '@/lib/ticket';
 
@@ -28,6 +29,7 @@ const props = defineProps<{
 }>();
 
 const page = usePage();
+const toast = useToast();
 
 const form = useForm({ ...props.values, version: props.version });
 
@@ -41,8 +43,14 @@ const allowed: Record<Field, boolean> = {
 const otherError = (key: 'conflict' | 'version') => (form.errors as Record<string, string | undefined>)[key];
 const formError = computed(() => otherError('version'));
 
-const noChanges = ref(false);
-const serverInfo = computed(() => page.props.flash?.info ?? null);
+/** Aviso do servidor quando os valores enviados já eram os atuais. */
+watch(
+    () => page.props.flash,
+    (flash) => {
+        if (flash?.info) toast.info(flash.info);
+    },
+    { immediate: true },
+);
 
 const departmentChanged = computed(() => props.can.department && form.department_id !== props.values.department_id);
 const newDepartmentLabel = computed(
@@ -59,9 +67,8 @@ const focusFirstError = async () => {
 const submit = () => {
     if (form.processing) return;
 
-    noChanges.value = false;
     if (!form.isDirty) {
-        noChanges.value = true;
+        toast.info('Nenhuma alteração para salvar.');
         return;
     }
 
@@ -85,7 +92,6 @@ const reloadCurrent = () => {
 };
 
 const clearError = (field: Field) => {
-    noChanges.value = false;
     if (form.errors[field]) form.clearErrors(field);
 };
 
@@ -126,10 +132,6 @@ const cancel = () => router.visit(route('tickets.show', props.ticket.number));
                         </Alert>
 
                         <Alert v-if="formError" variant="danger" title="Não foi possível salvar">{{ formError }}</Alert>
-
-                        <Alert v-if="noChanges || serverInfo" variant="info">
-                            {{ serverInfo ?? 'Nenhuma alteração para salvar.' }}
-                        </Alert>
 
                         <p class="text-sm text-neutral-600">
                             Status, responsável, resolução e encerramento são alterados pelos fluxos próprios
