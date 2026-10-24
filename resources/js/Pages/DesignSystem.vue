@@ -457,28 +457,85 @@ const simulateLoading = () => {
                     </Card>
                 </section>
 
-                <!-- ALERTAS -->
+                <!-- ALERTAS E TOASTS -->
                 <section id="alertas" class="scroll-mt-8 space-y-4">
                     <h2 class="text-lg font-semibold">Alertas e toasts</h2>
-                    <div class="space-y-3">
-                        <Alert variant="success" title="Chamado atualizado">As alterações foram salvas.</Alert>
-                        <Alert variant="info">Este chamado foi atribuído a você e o status passou para Em atendimento.</Alert>
-                        <Alert variant="warning" title="SLA em risco">Restam menos de 20% do prazo de resolução.</Alert>
-                        <Alert variant="danger" title="Não foi possível concluir">
-                            Outro técnico assumiu este chamado há instantes. Os dados foram atualizados.
-                        </Alert>
-                    </div>
-                    <Card>
-                        <p class="mb-3 text-sm text-neutral-600">
-                            Toasts somem após 5s; erros permanecem até serem fechados.
-                        </p>
-                        <div class="flex flex-wrap gap-3">
-                            <Button variant="secondary" @click="toast.success('Chamado salvo com sucesso.')">Sucesso</Button>
-                            <Button variant="secondary" @click="toast.info('Nova resposta no chamado HD-7K4M9Q2X.')">Informação</Button>
-                            <Button variant="secondary" @click="toast.warning('Este chamado está próximo do vencimento.')">Alerta</Button>
-                            <Button variant="secondary" @click="toast.error('Você não tem permissão para esta ação.')">Erro</Button>
+
+                    <Card title="Toast — padrão único de notificação operacional">
+                        <div class="space-y-4">
+                            <p class="text-sm text-neutral-600">
+                                Todo resultado de uma operação (sucesso, erro, alerta ou informação) é um toast.
+                                O padrão é o dos chamados: canto superior direito, some após 5s (inclusive erros),
+                                fecha pelo botão, ícone e borda conforme a variante.
+                            </p>
+                            <div class="flex flex-wrap gap-3">
+                                <Button variant="secondary" @click="toast.success('Chamado salvo com sucesso.')">Sucesso</Button>
+                                <Button variant="secondary" @click="toast.info('Nenhuma alteração para salvar.')">Informação</Button>
+                                <Button variant="secondary" @click="toast.warning('Não foi possível enviar o e-mail. O usuário pode usar “Esqueci minha senha”.')">Alerta</Button>
+                                <Button variant="secondary" @click="toast.error('Você não tem permissão para esta ação.')">Erro</Button>
+                            </div>
+                            <div>
+                                <h3 class="mb-3 text-sm font-medium text-neutral-600">Mensagens padronizadas</h3>
+                                <div class="flex flex-wrap gap-3">
+                                    <Button variant="secondary" @click="toast.formErrors()">Validação no formulário</Button>
+                                    <Button variant="secondary" @click="toast.unexpected()">Falha inesperada</Button>
+                                    <Button
+                                        variant="secondary"
+                                        @click="
+                                            toast.success('Mensagem repetida.');
+                                            toast.success('Mensagem repetida.');
+                                        "
+                                    >
+                                        Disparo duplicado (aparece uma vez)
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
                     </Card>
+
+                    <Card title="Como usar">
+                        <ul class="list-disc space-y-2 ps-5 text-sm text-neutral-600">
+                            <li>
+                                <strong class="font-medium text-neutral-900">Mensagem do servidor:</strong> use
+                                <code class="font-mono text-xs">->with('success' | 'info' | 'warning', …)</code> no controller. O
+                                <code class="font-mono text-xs">ToastContainer</code> dos layouts exibe; a tela não precisa tratar.
+                            </li>
+                            <li>
+                                <strong class="font-medium text-neutral-900">Erros devolvidos pelo servidor:</strong> viram toast
+                                automaticamente (a mensagem, se for uma só, ou “Corrija os campos destacados”). O erro de cada campo continua junto do campo.
+                            </li>
+                            <li>
+                                <strong class="font-medium text-neutral-900">Na tela:</strong>
+                                <code class="font-mono text-xs">useToast()</code> com
+                                <code class="font-mono text-xs">success</code>, <code class="font-mono text-xs">info</code>,
+                                <code class="font-mono text-xs">warning</code>, <code class="font-mono text-xs">error</code>,
+                                <code class="font-mono text-xs">formErrors()</code> (validação no navegador) e
+                                <code class="font-mono text-xs">unexpected()</code> (rede ou 5xx).
+                            </li>
+                            <li>
+                                Mensagens objetivas, sem detalhes técnicos. Mensagens idênticas já visíveis não se repetem.
+                            </li>
+                        </ul>
+                    </Card>
+
+                    <div>
+                        <h3 class="mb-3 text-sm font-medium text-neutral-600">
+                            Alerta em linha — somente para o que não é notificação de operação
+                        </h3>
+                        <div class="space-y-3">
+                            <Alert variant="info">Orientação ou ajuda ao preencher: o status passará para Em atendimento.</Alert>
+                            <Alert variant="warning" title="A categoria será inativada">
+                                Aviso antes de confirmar uma ação, ou estado que afeta a tela (ex.: nenhum papel disponível).
+                            </Alert>
+                            <Alert variant="danger" title="O chamado foi alterado">
+                                Conflito com ação para o usuário decidir (ex.: recarregar dados atuais), ou falha ao carregar uma lista.
+                            </Alert>
+                        </div>
+                        <p class="mt-3 text-xs text-neutral-500">
+                            Confirmações, indicadores de carregamento, estados vazios e textos de ajuda continuam como estão.
+                            Eles não substituem o toast como retorno de uma operação.
+                        </p>
+                    </div>
                 </section>
 
                 <!-- CARDS -->

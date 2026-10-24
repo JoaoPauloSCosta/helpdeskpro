@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
@@ -13,6 +13,7 @@ import TextInput from '@/Components/TextInput.vue';
 import Textarea from '@/Components/Textarea.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
 import type { TicketDetail, TicketPendingField, TicketPendingRegistration } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 /**
  * Registro de pendência (CHA-08). Tipos e campos vêm do backend, que revalida permissão, tipo,
@@ -32,6 +33,7 @@ const textFields: { key: Exclude<TicketPendingField, 'related_department_id' | '
     { key: 'responsible_name', label: 'Responsável externo ou contato' },
 ];
 
+const toast = useToast();
 const form = useForm({
     pause_status: '' as string | number | null,
     // Status visto ao abrir o modal; o servidor recusa se ele mudou nesse meio-tempo.
@@ -44,7 +46,6 @@ const form = useForm({
     expected_return_at: '',
 });
 
-const sendError = ref(false);
 let submitting = false;
 
 const errors = computed(() => form.errors as Record<string, string | undefined>);
@@ -65,7 +66,6 @@ watch(
         if (!open) return;
         form.reset();
         form.clearErrors();
-        sendError.value = false;
         form.expected_status = props.pending.current;
     },
 );
@@ -73,7 +73,6 @@ watch(
 const submit = () => {
     if (form.processing || !canSubmit.value) return;
 
-    sendError.value = false;
     submitting = true;
     form.transform((data) => {
         // Somente os campos do tipo escolhido; os demais nem são enviados.
@@ -111,12 +110,12 @@ onMounted(() => {
         router.on('exception', (event) => {
             if (!submitting) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (!submitting || event.detail.response.status < 500) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
     );
 });
@@ -137,11 +136,6 @@ onUnmounted(() => removers.forEach((remove) => remove()));
                 </div>
 
                 <Alert v-if="errors.conflict" variant="warning" title="O chamado foi alterado">{{ errors.conflict }}</Alert>
-                <Alert v-if="errors.expected_status" variant="danger">{{ errors.expected_status }}</Alert>
-                <Alert v-if="sendError" variant="danger" title="Não foi possível concluir">
-                    Verifique sua conexão e tente novamente. Os dados preenchidos foram mantidos.
-                </Alert>
-
                 <EmptyState
                     v-if="pending.types.length === 0"
                     icon="lock"

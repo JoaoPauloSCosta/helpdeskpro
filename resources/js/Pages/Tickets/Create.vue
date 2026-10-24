@@ -14,6 +14,7 @@ import TextInput from '@/Components/TextInput.vue';
 import { useLeaveGuard } from '@/composables/useLeaveGuard';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import type { Option, TicketRequester } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     categories: Option[];
@@ -26,6 +27,7 @@ const props = defineProps<{
 /* ---------- Formulário ---------- */
 
 // Somente o que o solicitante informa. Autor, departamento, status e identificador ficam no backend.
+const toast = useToast();
 const form = useForm({
     title: '',
     description: '',
@@ -43,7 +45,6 @@ const canSubmit = computed(() => hasCategories.value && props.requester.departme
 const otherError = (key: 'department' | 'form' | 'submission_token') =>
     (form.errors as Record<string, string | undefined>)[key];
 
-const formError = computed(() => otherError('form') ?? otherError('submission_token'));
 
 const count = (value: string, max: number) =>
     `${value.length.toLocaleString('pt-BR')} / ${max.toLocaleString('pt-BR')}`;
@@ -80,6 +81,7 @@ const { leaveOpen, confirmLeave, stayOnPage, setSubmitting } = useLeaveGuard(() 
 const submit = () => {
     if (form.processing || !canSubmit.value) return;
     if (!validate()) {
+        toast.formErrors();
         focusFirstError();
         return;
     }
@@ -122,10 +124,6 @@ const tips = [
                 <form id="ticket-form" class="min-w-0 lg:col-span-2" novalidate @submit.prevent="submit">
                     <Card title="Informações do chamado">
                         <div class="space-y-4">
-                            <Alert v-if="formError" variant="danger" title="Não foi possível abrir o chamado">
-                                {{ formError }}
-                            </Alert>
-
                             <Alert v-if="!requester.departmentActive" variant="warning" title="Departamento não disponível">
                                 Seu cadastro não possui um departamento ativo, e todo chamado precisa estar vinculado
                                 a um. Procure o administrador do sistema para regularizar o cadastro.

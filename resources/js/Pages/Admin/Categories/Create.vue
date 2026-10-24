@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import Alert from '@/Components/Alert.vue';
 import Breadcrumbs from '@/Components/Breadcrumbs.vue';
 import Button from '@/Components/Button.vue';
 import Card from '@/Components/Card.vue';
@@ -16,6 +15,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { categoryFormErrors, type CategoryFormField } from '@/lib/category';
 import { adminHomeHref } from '@/lib/navigation';
 import type { Option } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     statuses: Option[];
@@ -23,6 +23,7 @@ const props = defineProps<{
     submissionToken: string;
 }>();
 
+const toast = useToast();
 const page = usePage();
 
 /* ---------- Formulário ---------- */
@@ -34,11 +35,6 @@ const form = useForm({
     submission_token: props.submissionToken,
 });
 
-/** Erros que não pertencem a um campo editável (falhas gerais e token de envio). */
-const formError = computed(
-    () => (form.errors as Record<string, string | undefined>).form ?? (form.errors as Record<string, string | undefined>).submission_token,
-);
-const unexpectedError = ref(false);
 
 const count = (value: string, max: number) =>
     `${value.length.toLocaleString('pt-BR')} / ${max.toLocaleString('pt-BR')}`;
@@ -63,11 +59,11 @@ const { leaveOpen, confirmLeave, stayOnPage, setSubmitting } = useLeaveGuard(() 
 const submit = () => {
     if (form.processing) return;
     if (!validate()) {
+        toast.formErrors();
         focusFirstError();
         return;
     }
 
-    unexpectedError.value = false;
     setSubmitting(true);
     form.post(route('admin.categories.store'), {
         preserveScroll: true,
@@ -88,12 +84,12 @@ onMounted(() => {
     removers.push(
         router.on('exception', (event) => {
             event.preventDefault();
-            unexpectedError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (event.detail.response.status >= 500) {
                 event.preventDefault();
-                unexpectedError.value = true;
+                toast.unexpected();
             }
         }),
     );
@@ -120,14 +116,6 @@ const breadcrumbs = computed(() => [
             <form id="category-form" novalidate @submit.prevent="submit">
                 <Card title="Dados da categoria">
                     <div class="space-y-4">
-                        <Alert v-if="unexpectedError" variant="danger" title="Não foi possível cadastrar a categoria">
-                            Ocorreu uma falha inesperada e nada foi gravado. Verifique sua conexão e tente novamente.
-                        </Alert>
-
-                        <Alert v-if="formError" variant="danger" title="Não foi possível cadastrar a categoria">
-                            {{ formError }}
-                        </Alert>
-
                         <FormField label="Nome da categoria" required :error="form.errors.name" v-slot="{ id, describedby, invalid }">
                             <TextInput
                                 :id="id"

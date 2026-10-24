@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
 import Card from '@/Components/Card.vue';
 import CommentCard from '@/Components/CommentCard.vue';
@@ -105,7 +104,6 @@ watch(
         if (flash?.ticketCreated === props.ticket.number) {
             toast.success(`Chamado ${props.ticket.number} aberto com sucesso.`);
         }
-        if (flash?.success) toast.success(flash.success);
     },
     { immediate: true },
 );
@@ -120,7 +118,6 @@ const assignmentAllowed = computed(() => (props.assignment?.current ? props.can.
 
 const selfAssignNumber = ref<string | null>(null);
 /** Recusa vinda do servidor (chamado deixou de estar disponível). */
-const selfAssignError = computed(() => (page.props.errors as Record<string, string | undefined>).self_assign);
 
 /* ---------- Alteração de status (CHA-07) ---------- */
 
@@ -198,13 +195,11 @@ const form = useForm({
 
 const isInternal = computed(() => form.visibility === 'internal');
 const focusBody = () => document.querySelector<HTMLElement>('#comment-form textarea')?.focus();
-const sendError = ref(false);
 let submitting = false;
 
 const submit = () => {
     if (form.processing) return;
 
-    sendError.value = false;
     form.clearErrors();
 
     if (!form.body.trim()) {
@@ -232,12 +227,12 @@ onMounted(() => {
         router.on('exception', (event) => {
             if (!submitting) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (!submitting || event.detail.response.status < 500) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
     );
 });
@@ -306,8 +301,6 @@ const commentCount = computed(() =>
                     </div>
                 </div>
             </div>
-
-            <Alert v-if="selfAssignError" variant="warning" title="Não foi possível assumir o chamado">{{ selfAssignError }}</Alert>
 
             <!-- SLA: somente o que o backend registrou; nada é estimado no navegador -->
             <section aria-labelledby="sla-title" class="space-y-4">
@@ -441,10 +434,6 @@ const commentCount = computed(() =>
 
                         <template v-if="can.comment || ticket.status === 'Encerrado'" #footer>
                             <form v-if="can.comment" id="comment-form" class="space-y-4 py-2" novalidate @submit.prevent="submit">
-                                <Alert v-if="sendError" variant="danger" title="Não foi possível enviar a mensagem">
-                                    Verifique sua conexão e tente novamente. O texto digitado foi mantido.
-                                </Alert>
-
                                 <fieldset v-if="can.addInternalNote" class="space-y-2">
                                     <legend class="text-sm font-medium text-neutral-700">Tipo de mensagem</legend>
                                     <div class="flex flex-col gap-3 sm:flex-row sm:gap-6">

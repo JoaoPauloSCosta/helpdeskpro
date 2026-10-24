@@ -11,6 +11,7 @@ import Spinner from '@/Components/Spinner.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
 import type { TicketDetail, TicketTechnician } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     show: boolean;
@@ -24,6 +25,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>();
 
+const toast = useToast();
 const isReassign = computed(() => props.current !== null);
 const title = computed(() => (isReassign.value ? 'Reatribuir técnico' : 'Atribuir técnico'));
 
@@ -36,11 +38,9 @@ const form = useForm({
 const search = ref('');
 const loading = ref(false);
 const loadError = ref(false);
-const sendError = ref(false);
 let submitting = false;
 
 const conflict = computed(() => (form.errors as Record<string, string | undefined>).conflict);
-const formError = computed(() => (form.errors as Record<string, string | undefined>).expected_assignee_id);
 
 /** Busca o que estiver na lista agora: elegíveis e sem o responsável atual. */
 const loadTechnicians = () => {
@@ -68,7 +68,6 @@ watch(
     (open) => {
         if (!open) return;
         form.clearErrors();
-        sendError.value = false;
         startFresh();
     },
 );
@@ -89,7 +88,6 @@ const selected = computed(() => props.technicians?.find((t) => t.id === form.tec
 const submit = () => {
     if (form.processing || !selected.value || !props.allowed) return;
 
-    sendError.value = false;
     submitting = true;
     form.put(route('tickets.assignee.update', props.ticket.number), {
         preserveScroll: true,
@@ -114,12 +112,12 @@ onMounted(() => {
         router.on('exception', (event) => {
             if (!submitting) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (!submitting || event.detail.response.status < 500) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
     );
 });
@@ -144,11 +142,6 @@ onUnmounted(() => removers.forEach((remove) => remove()));
                 <Alert v-if="!allowed" variant="info">
                     Você não tem permissão para {{ isReassign ? 'reatribuir' : 'atribuir' }} este chamado no estado atual.
                 </Alert>
-                <Alert v-if="formError" variant="danger">{{ formError }}</Alert>
-                <Alert v-if="sendError" variant="danger" title="Não foi possível concluir">
-                    Verifique sua conexão e tente novamente.
-                </Alert>
-
                 <!-- Responsável atual -->
                 <div class="rounded-md border border-neutral-200 bg-neutral-50 p-3">
                     <p class="text-xs font-medium text-neutral-500">Responsável atual</p>

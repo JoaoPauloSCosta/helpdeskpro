@@ -94,7 +94,6 @@ const rows = computed(() => props.departments.data);
 const isEmpty = computed(() => rows.value.length === 0);
 /** A coluna de ação só aparece quando há algum departamento que o operador pode editar (ADM-06). */
 const showEdit = computed(() => rows.value.some((department) => department.can_edit));
-const successMessage = computed(() => page.props.flash?.success ?? null);
 const count = (value: number, singular: string, plural: string) =>
     `${value.toLocaleString('pt-BR')} ${value === 1 ? singular : plural}`;
 
@@ -185,8 +184,6 @@ const breadcrumbs = computed(() => [
             </Card>
 
             <!-- Confirmação vinda de outra tela, como o cadastro (ADM-05), só depois da gravação real -->
-            <Alert v-if="successMessage" variant="success">{{ successMessage }}</Alert>
-
             <Alert v-if="loadError" variant="danger" title="Não foi possível carregar os departamentos">
                 <p>Verifique sua conexão e tente novamente.</p>
                 <Button variant="secondary" size="sm" class="mt-3" @click="retry">Tentar novamente</Button>

@@ -46,8 +46,6 @@ const submit = () => {
             } else if (errors.current_password) {
                 form.reset('current_password');
                 currentInput.value?.focus();
-            } else {
-                toast.error('Não foi possível alterar a senha. Tente novamente.');
             }
         },
     });

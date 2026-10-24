@@ -1,8 +1,46 @@
 <script setup lang="ts">
 import Icon, { type IconName } from '@/Components/Icon.vue';
-import { useToast, type ToastVariant } from '@/composables/useToast';
+import { FORM_ERRORS_MESSAGE, useToast, type ToastVariant } from '@/composables/useToast';
+import { router, usePage } from '@inertiajs/vue3';
+import { onMounted, onUnmounted, watch } from 'vue';
 
-const { toasts, dismiss } = useToast();
+const { toasts, dismiss, ...toast } = useToast();
+const page = usePage();
+
+/**
+ * Feedback vindo do servidor, centralizado aqui para valer em todas as telas.
+ * Cada resposta traz um novo objeto `flash`, então ações repetidas voltam a notificar;
+ * recargas parciais mantêm o objeto e não repetem o toast.
+ */
+watch(
+    () => page.props.flash,
+    (flash) => {
+        if (flash?.success) toast.success(flash.success);
+        if (flash?.info) toast.info(flash.info);
+        if (flash?.warning) toast.warning(flash.warning);
+    },
+    { immediate: true },
+);
+
+/**
+ * Erros de validação e regras de negócio devolvidos pelo servidor. Um único erro mostra a
+ * própria mensagem; vários remetem aos campos destacados. `conflict` fica de fora: a tela o
+ * apresenta junto da ação de recarregar os dados atuais.
+ */
+const removers: (() => void)[] = [];
+onMounted(() => {
+    removers.push(
+        router.on('error', (event) => {
+            const messages = Object.entries(event.detail.errors)
+                .filter(([key]) => key !== 'conflict')
+                .map(([, message]) => message);
+
+            if (messages.length === 1) toast.error(messages[0]);
+            else if (messages.length > 1) toast.error(FORM_ERRORS_MESSAGE);
+        }),
+    );
+});
+onUnmounted(() => removers.forEach((remove) => remove()));
 
 const styles: Record<ToastVariant, { box: string; icon: IconName }> = {
     success: { box: 'border-success-border', icon: 'check-circle' },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Breadcrumbs from '@/Components/Breadcrumbs.vue';
@@ -14,11 +14,13 @@ import { useLeaveGuard } from '@/composables/useLeaveGuard';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { adminHomeHref } from '@/lib/navigation';
 import { roleFormErrors, type RoleFormField } from '@/lib/role';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     limits: { name: number; description: number };
 }>();
 
+const toast = useToast();
 const page = usePage();
 
 /* ---------- Formulário ---------- */
@@ -28,7 +30,6 @@ const form = useForm({
     description: '',
 });
 
-const unexpectedError = ref(false);
 
 const count = (value: string, max: number) =>
     `${value.length.toLocaleString('pt-BR')} / ${max.toLocaleString('pt-BR')}`;
@@ -53,11 +54,11 @@ const { leaveOpen, confirmLeave, stayOnPage, setSubmitting } = useLeaveGuard(() 
 const submit = () => {
     if (form.processing) return;
     if (!validate()) {
+        toast.formErrors();
         focusFirstError();
         return;
     }
 
-    unexpectedError.value = false;
     setSubmitting(true);
     form.post(route('admin.roles.store'), {
         preserveScroll: true,
@@ -78,12 +79,12 @@ onMounted(() => {
     removers.push(
         router.on('exception', (event) => {
             event.preventDefault();
-            unexpectedError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (event.detail.response.status >= 500) {
                 event.preventDefault();
-                unexpectedError.value = true;
+                toast.unexpected();
             }
         }),
     );
@@ -110,10 +111,6 @@ const breadcrumbs = computed(() => [
             <form id="role-form" novalidate @submit.prevent="submit">
                 <Card title="Dados do papel">
                     <div class="space-y-4">
-                        <Alert v-if="unexpectedError" variant="danger" title="Não foi possível cadastrar o papel">
-                            Ocorreu uma falha inesperada e nada foi gravado. Verifique sua conexão e tente novamente.
-                        </Alert>
-
                         <FormField label="Nome do papel" required :error="form.errors.name" v-slot="{ id, describedby, invalid }">
                             <TextInput
                                 :id="id"

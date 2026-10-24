@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
@@ -9,6 +9,7 @@ import StatusBadge from '@/Components/StatusBadge.vue';
 import Textarea from '@/Components/Textarea.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
 import type { TicketDetail, TicketResolutionForm } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 /**
  * Resolução (CHA-09). O backend revalida permissão, status atual e resumo ao gravar; autor,
@@ -24,13 +25,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>();
 
+const toast = useToast();
 const form = useForm({
     resolution_summary: '',
     // Status visto ao abrir o modal; o servidor recusa se ele mudou nesse meio-tempo.
     expected_status: '',
 });
 
-const sendError = ref(false);
 let submitting = false;
 
 const errors = computed(() => form.errors as Record<string, string | undefined>);
@@ -46,7 +47,6 @@ watch(
         if (!open) return;
         form.reset();
         form.clearErrors();
-        sendError.value = false;
         form.expected_status = props.resolution.current;
     },
 );
@@ -54,7 +54,6 @@ watch(
 const submit = () => {
     if (form.processing) return;
 
-    sendError.value = false;
 
     if (!filled.value) {
         form.setError('resolution_summary', 'Descreva a solução aplicada.');
@@ -88,12 +87,12 @@ onMounted(() => {
         router.on('exception', (event) => {
             if (!submitting) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (!submitting || event.detail.response.status < 500) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
     );
 });
@@ -131,12 +130,6 @@ onUnmounted(() => removers.forEach((remove) => remove()));
                 <Alert v-else-if="!allowed" variant="warning" title="Resolução indisponível">
                     Este chamado não pode ser resolvido por você no estado atual.
                 </Alert>
-                <Alert v-if="errors.status" variant="danger">{{ errors.status }}</Alert>
-                <Alert v-if="errors.expected_status" variant="danger">{{ errors.expected_status }}</Alert>
-                <Alert v-if="sendError" variant="danger" title="Não foi possível concluir">
-                    Verifique sua conexão e tente novamente. O texto digitado foi mantido.
-                </Alert>
-
                 <FormField
                     label="Resumo da solução"
                     required

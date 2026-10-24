@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Breadcrumbs from '@/Components/Breadcrumbs.vue';
@@ -17,6 +17,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { adminHomeHref } from '@/lib/navigation';
 import type { Option } from '@/lib/ticket';
 import { userFormErrors, type RoleOption, type UserFormField } from '@/lib/user';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     roles: RoleOption[];
@@ -28,6 +29,7 @@ const props = defineProps<{
 /* ---------- Formulário ---------- */
 
 // Somente o que o operador informa. Senha, verificação de e-mail e tokens ficam no backend.
+const toast = useToast();
 const form = useForm({
     name: '',
     email: '',
@@ -59,16 +61,15 @@ const focusFirstError = async () => {
 const { leaveOpen, confirmLeave, stayOnPage, setSubmitting } = useLeaveGuard(() => form.isDirty);
 
 /** Falha inesperada (rede ou erro do servidor), distinta dos erros de validação. */
-const unexpectedError = ref(false);
 
 const submit = () => {
     if (form.processing || !hasRoles.value) return;
     if (!validate()) {
+        toast.formErrors();
         focusFirstError();
         return;
     }
 
-    unexpectedError.value = false;
     setSubmitting(true);
     // Departamento vazio vai como nulo: é opcional.
     form.transform((data) => ({ ...data, department_id: data.department_id || null })).post(route('admin.users.store'), {
@@ -90,12 +91,12 @@ onMounted(() => {
     removers.push(
         router.on('exception', (event) => {
             event.preventDefault();
-            unexpectedError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (event.detail.response.status >= 500) {
                 event.preventDefault();
-                unexpectedError.value = true;
+                toast.unexpected();
             }
         }),
     );
@@ -122,10 +123,6 @@ const breadcrumbs = computed(() => [
             </div>
 
             <form id="user-form" class="space-y-6" novalidate @submit.prevent="submit">
-                <Alert v-if="unexpectedError" variant="danger" title="Não foi possível criar o usuário">
-                    Ocorreu uma falha inesperada e nada foi gravado. Verifique sua conexão e tente novamente.
-                </Alert>
-
                 <Alert v-if="!hasRoles" variant="warning" title="Nenhum papel disponível">
                     Não há papéis que você possa atribuir. Procure quem administra papéis e permissões.
                 </Alert>

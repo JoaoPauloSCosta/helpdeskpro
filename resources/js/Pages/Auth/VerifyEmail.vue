@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { watch } from 'vue';
+import { useToast } from '@/composables/useToast';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -14,8 +15,15 @@ const submit = () => {
     form.post(route('verification.send'));
 };
 
-const verificationLinkSent = computed(
-    () => props.status === 'verification-link-sent',
+const toast = useToast();
+
+// Confirmação do reenvio do link de verificação, por toast.
+watch(
+    () => props.status,
+    (status) => {
+        if (status === 'verification-link-sent') toast.success('Um novo link de verificação foi enviado ao e-mail informado no cadastro.');
+    },
+    { immediate: true },
 );
 </script>
 
@@ -27,14 +35,6 @@ const verificationLinkSent = computed(
             Thanks for signing up! Before getting started, could you verify your
             email address by clicking on the link we just emailed to you? If you
             didn't receive the email, we will gladly send you another.
-        </div>
-
-        <div
-            class="mb-4 text-sm font-medium text-success-text"
-            v-if="verificationLinkSent"
-        >
-            A new verification link has been sent to the email address you
-            provided during registration.
         </div>
 
         <form @submit.prevent="submit">

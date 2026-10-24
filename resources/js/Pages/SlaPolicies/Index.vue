@@ -106,7 +106,6 @@ const hasNoPolicies = computed(() => props.summary.total === 0);
 /** A coluna de ação só aparece quando a tela de detalhes (SLA-04) estiver disponível. */
 const showDetails = computed(() => rows.value.some((policy) => policy.can_view || policy.can_edit));
 const editLabel = (policy: SlaPolicyListItem) => `Editar a política de prioridade ${policy.priority}`;
-const successMessage = computed(() => page.props.flash?.success ?? null);
 const formatCount = (value: number) => value.toLocaleString('pt-BR');
 const situation = (policy: SlaPolicyListItem) => (policy.is_active ? 'Ativa' : 'Inativa');
 const detailsLabel = (policy: SlaPolicyListItem) => `Ver detalhes da política de prioridade ${policy.priority}`;
@@ -206,8 +205,6 @@ const breadcrumbs = [{ label: 'Início', href: route('dashboard') }, { label: 'S
             </Card>
 
             <!-- Confirmação vinda de outra tela, só depois da gravação real -->
-            <Alert v-if="successMessage" variant="success">{{ successMessage }}</Alert>
-
             <Alert v-if="loadError" variant="danger" title="Não foi possível carregar as políticas de SLA">
                 <p>Verifique sua conexão e tente novamente.</p>
                 <Button variant="secondary" size="sm" class="mt-3" @click="retry">Tentar novamente</Button>

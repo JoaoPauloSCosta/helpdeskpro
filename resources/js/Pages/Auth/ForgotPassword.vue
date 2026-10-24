@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import Alert from '@/Components/Alert.vue';
+import { watch } from 'vue';
 import Button from '@/Components/Button.vue';
 import FormField from '@/Components/FormField.vue';
 import IconInput from '@/Components/IconInput.vue';
+import { useToast } from '@/composables/useToast';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
-defineProps<{
+const props = defineProps<{
     status?: string;
 }>();
+
+const toast = useToast();
+
+// Confirmação do envio do link de redefinição (e da nova senha), sempre por toast.
+watch(
+    () => props.status,
+    (status) => {
+        if (status) toast.success(status);
+    },
+    { immediate: true },
+);
 
 const form = useForm({
     email: '',
@@ -32,8 +44,6 @@ const submit = () => {
         <p class="mb-8 text-sm text-neutral-500">
             Informe o e-mail da sua conta e enviaremos um link para você criar uma nova senha.
         </p>
-
-        <Alert v-if="status" variant="success" class="mb-6">{{ status }}</Alert>
 
         <form class="space-y-4" novalidate @submit.prevent="submit">
             <FormField label="E-mail" :error="form.errors.email" v-slot="{ id, describedby, invalid }">

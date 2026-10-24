@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, watch } from 'vue';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { computed, nextTick } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
 import Card from '@/Components/Card.vue';
@@ -28,7 +28,6 @@ const props = defineProps<{
     version: string;
 }>();
 
-const page = usePage();
 const toast = useToast();
 
 const form = useForm({ ...props.values, version: props.version });
@@ -41,16 +40,6 @@ const allowed: Record<Field, boolean> = {
 };
 
 const otherError = (key: 'conflict' | 'version') => (form.errors as Record<string, string | undefined>)[key];
-const formError = computed(() => otherError('version'));
-
-/** Aviso do servidor quando os valores enviados já eram os atuais. */
-watch(
-    () => page.props.flash,
-    (flash) => {
-        if (flash?.info) toast.info(flash.info);
-    },
-    { immediate: true },
-);
 
 const departmentChanged = computed(() => props.can.department && form.department_id !== props.values.department_id);
 const newDepartmentLabel = computed(
@@ -130,8 +119,6 @@ const cancel = () => router.visit(route('tickets.show', props.ticket.number));
                                 Recarregar dados atuais
                             </Button>
                         </Alert>
-
-                        <Alert v-if="formError" variant="danger" title="Não foi possível salvar">{{ formError }}</Alert>
 
                         <p class="text-sm text-neutral-600">
                             Status, responsável, resolução e encerramento são alterados pelos fluxos próprios

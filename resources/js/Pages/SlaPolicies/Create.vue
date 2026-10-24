@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Badge from '@/Components/Badge.vue';
@@ -24,6 +24,7 @@ import {
     type TargetLimits,
 } from '@/lib/sla';
 import type { Option } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     priorities: SlaPriorityOption[];
@@ -35,6 +36,7 @@ const props = defineProps<{
 /* ---------- Formulário ---------- */
 
 // Nenhuma meta vem preenchida: o PRD não define valores padrão.
+const toast = useToast();
 const form = useForm({
     priority: '',
     first_response_minutes: '',
@@ -43,11 +45,6 @@ const form = useForm({
     submission_token: props.submissionToken,
 });
 
-/** Erros que não pertencem a um campo editável (falhas gerais e token de envio). */
-const formError = computed(
-    () => (form.errors as Record<string, string | undefined>).form ?? (form.errors as Record<string, string | undefined>).submission_token,
-);
-const unexpectedError = ref(false);
 const hasPriorities = computed(() => props.priorities.length > 0);
 
 const selectedPriority = computed(() => props.priorities.find((p) => p.value === form.priority) ?? null);
@@ -85,11 +82,11 @@ const { leaveOpen, confirmLeave, stayOnPage, setSubmitting } = useLeaveGuard(() 
 const submit = () => {
     if (form.processing || !hasPriorities.value) return;
     if (!validate()) {
+        toast.formErrors();
         focusFirstError();
         return;
     }
 
-    unexpectedError.value = false;
     setSubmitting(true);
     form.transform((data) => ({
         ...data,
@@ -144,12 +141,12 @@ onMounted(() => {
     removers.push(
         router.on('exception', (event) => {
             event.preventDefault();
-            unexpectedError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (event.detail.response.status >= 500) {
                 event.preventDefault();
-                unexpectedError.value = true;
+                toast.unexpected();
             }
         }),
     );
@@ -183,14 +180,6 @@ const breadcrumbs = [
             </Alert>
 
             <form v-else id="sla-policy-form" class="space-y-6" novalidate @submit.prevent="submit">
-                <Alert v-if="unexpectedError" variant="danger" title="Não foi possível cadastrar a política">
-                    Ocorreu uma falha inesperada e nada foi gravado. Verifique sua conexão e tente novamente.
-                </Alert>
-
-                <Alert v-if="formError" variant="danger" title="Não foi possível cadastrar a política">
-                    {{ formError }}
-                </Alert>
-
                 <!-- A: prioridade e situação -->
                 <Card title="Informações gerais">
                     <div class="space-y-6">

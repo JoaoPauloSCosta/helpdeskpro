@@ -291,7 +291,6 @@ const rows = computed(() => props.tickets.data);
 const selfAssignNumber = ref<string | null>(null);
 /** A coluna de ação só aparece quando há algum chamado que o usuário pode assumir. */
 const showSelfAssign = computed(() => rows.value.some((ticket) => ticket.can_self_assign));
-const selfAssignError = computed(() => serverErrors.value.self_assign);
 const actionColumnClass = 'sticky right-0 border-l border-neutral-200';
 
 /** Título como link para os detalhes (CHA-03); azul de texto usa primary-600 (design-system.md, 2.1). */
@@ -489,10 +488,6 @@ const mobileSort = computed({
                     </div>
                 </form>
             </Card>
-
-            <Alert v-if="selfAssignError" variant="warning" title="Não foi possível assumir o chamado">
-                {{ selfAssignError }}
-            </Alert>
 
             <Alert v-if="loadError" variant="danger" title="Não foi possível carregar os chamados">
                 <p>Verifique sua conexão e tente novamente.</p>

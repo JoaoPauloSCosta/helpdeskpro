@@ -104,7 +104,6 @@ const isEmpty = computed(() => rows.value.length === 0);
 const hasNoCategories = computed(() => props.summary.total === 0);
 /** A coluna de ação só aparece quando há alguma categoria que o operador pode editar (ADM-09). */
 const showEdit = computed(() => rows.value.some((category) => category.can_edit));
-const successMessage = computed(() => page.props.flash?.success ?? null);
 const formatCount = (value: number) => value.toLocaleString('pt-BR');
 
 const breadcrumbs = computed(() => [
@@ -208,8 +207,6 @@ const breadcrumbs = computed(() => [
             </Card>
 
             <!-- Confirmação vinda de outra tela, só depois da gravação real -->
-            <Alert v-if="successMessage" variant="success">{{ successMessage }}</Alert>
-
             <Alert v-if="loadError" variant="danger" title="Não foi possível carregar as categorias">
                 <p>Verifique sua conexão e tente novamente.</p>
                 <Button variant="secondary" size="sm" class="mt-3" @click="retry">Tentar novamente</Button>

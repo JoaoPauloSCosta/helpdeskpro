@@ -25,6 +25,7 @@ import {
     type UserFormField,
     type UserFormValues,
 } from '@/lib/user';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     user: UserEditTarget;
@@ -35,6 +36,7 @@ const props = defineProps<{
     version: string;
 }>();
 
+const toast = useToast();
 const page = usePage();
 
 /* ---------- Formulário ---------- */
@@ -49,9 +51,6 @@ const reactivating = computed(() => !props.user.is_active && form.status === 'ac
 
 const otherError = (key: 'conflict' | 'version') => (form.errors as Record<string, string | undefined>)[key];
 
-const noChanges = ref(false);
-const serverInfo = computed(() => page.props.flash?.info ?? null);
-const unexpectedError = ref(false);
 
 const validate = (): boolean => {
     const errors = userFormErrors(form, props.limits, props.can.changeAccess);
@@ -74,7 +73,6 @@ const confirmDeactivationOpen = ref(false);
 
 const send = () => {
     confirmDeactivationOpen.value = false;
-    unexpectedError.value = false;
     setSubmitting(true);
 
     form
@@ -96,12 +94,12 @@ const send = () => {
 const submit = () => {
     if (form.processing) return;
 
-    noChanges.value = false;
     if (!form.isDirty) {
-        noChanges.value = true;
+        toast.info('Nenhuma alteração para salvar.');
         return;
     }
     if (!validate()) {
+        toast.formErrors();
         focusFirstError();
         return;
     }
@@ -117,7 +115,6 @@ const reloadCurrent = () => {
 };
 
 const clearError = (field: UserFormField) => {
-    noChanges.value = false;
     if (form.errors[field]) form.clearErrors(field);
 };
 
@@ -129,12 +126,12 @@ onMounted(() => {
     removers.push(
         router.on('exception', (event) => {
             event.preventDefault();
-            unexpectedError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (event.detail.response.status >= 500) {
                 event.preventDefault();
-                unexpectedError.value = true;
+                toast.unexpected();
             }
         }),
     );
@@ -181,18 +178,6 @@ const breadcrumbs = computed(() => [
                 <Alert v-if="otherError('conflict')" variant="danger" title="O usuário foi alterado">
                     <p>{{ otherError('conflict') }}</p>
                     <Button variant="secondary" size="sm" class="mt-3" @click="reloadCurrent">Recarregar dados atuais</Button>
-                </Alert>
-
-                <Alert v-if="otherError('version')" variant="danger" title="Não foi possível salvar">
-                    {{ otherError('version') }}
-                </Alert>
-
-                <Alert v-if="unexpectedError" variant="danger" title="Não foi possível salvar as alterações">
-                    Ocorreu uma falha inesperada e nada foi gravado. Verifique sua conexão e tente novamente.
-                </Alert>
-
-                <Alert v-if="noChanges || serverInfo" variant="info">
-                    {{ serverInfo ?? 'Nenhuma alteração para salvar.' }}
                 </Alert>
 
                 <Card title="Dados pessoais">

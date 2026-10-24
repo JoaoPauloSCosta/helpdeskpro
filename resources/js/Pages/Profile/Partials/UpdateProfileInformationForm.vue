@@ -28,10 +28,6 @@ const submit = () => {
             form.defaults({ name: saved.name, email: saved.email }).reset();
             toast.success('Alterações salvas com sucesso.');
         },
-        onError: (errors) => {
-            if (errors.name || errors.email) return;
-            toast.error('Não foi possível salvar as alterações. Tente novamente.');
-        },
     });
 };
 

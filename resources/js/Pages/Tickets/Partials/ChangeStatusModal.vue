@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
@@ -10,6 +10,7 @@ import Select from '@/Components/Select.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
 import type { TicketDetail, TicketStatusChange } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 /**
  * Alteração de status (CHA-07). Os destinos vêm do backend, que revalida permissão, transição
@@ -23,17 +24,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>();
 
+const toast = useToast();
 const form = useForm({
     status: '' as string | number | null,
     // Status visto ao abrir o modal; o servidor recusa se ele mudou nesse meio-tempo.
     expected_status: '',
 });
 
-const sendError = ref(false);
 let submitting = false;
 
 const conflict = computed(() => (form.errors as Record<string, string | undefined>).conflict);
-const formError = computed(() => (form.errors as Record<string, string | undefined>).expected_status);
 const selected = computed(() => props.statusChange.targets.find((t) => t.value === form.status) ?? null);
 
 /** Prepara uma nova tentativa a partir do status exibido agora. */
@@ -48,7 +48,6 @@ watch(
     (open) => {
         if (!open) return;
         form.clearErrors();
-        sendError.value = false;
         startFresh();
     },
 );
@@ -56,7 +55,6 @@ watch(
 const submit = () => {
     if (form.processing || !selected.value) return;
 
-    sendError.value = false;
     submitting = true;
     form.put(route('tickets.status.update', props.ticket.number), {
         preserveScroll: true,
@@ -80,12 +78,12 @@ onMounted(() => {
         router.on('exception', (event) => {
             if (!submitting) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (!submitting || event.detail.response.status < 500) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
     );
 });
@@ -105,11 +103,6 @@ onUnmounted(() => removers.forEach((remove) => remove()));
                 </div>
 
                 <Alert v-if="conflict" variant="warning" title="O chamado foi alterado">{{ conflict }}</Alert>
-                <Alert v-if="formError" variant="danger">{{ formError }}</Alert>
-                <Alert v-if="sendError" variant="danger" title="Não foi possível concluir">
-                    Verifique sua conexão e tente novamente.
-                </Alert>
-
                 <!-- Status atual -->
                 <div class="rounded-md border border-neutral-200 bg-neutral-50 p-3">
                     <p class="text-xs font-medium text-neutral-500">Status atual</p>

@@ -19,6 +19,7 @@ import { useLeaveGuard } from '@/composables/useLeaveGuard';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { adminHomeHref } from '@/lib/navigation';
 import type { CatalogGroup, CatalogPermission, MatrixView, RoleMatrixTarget, RoleOption } from '@/lib/role';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     roles: RoleOption[];
@@ -26,6 +27,7 @@ const props = defineProps<{
     catalog: CatalogGroup[];
 }>();
 
+const toast = useToast();
 const page = usePage();
 
 /* ---------- Estado persistido e alterações pendentes ---------- */
@@ -63,14 +65,12 @@ const toggle = (slug: string, checked: boolean) => {
     else next.delete(slug);
     form.permissions = sorted([...next]);
     form.clearErrors('permissions');
-    noChanges.value = false;
 };
 
 /** Volta à configuração carregada, sem tocar no banco. */
 const restore = () => {
     form.reset();
     form.clearErrors();
-    noChanges.value = false;
 };
 
 /* ---------- Pesquisa e filtros (sobre o catálogo completo, sem perder seleções) ---------- */
@@ -146,23 +146,15 @@ const stay = () => {
     roleChoice.value = props.selected?.id ?? '';
 };
 
-const noChanges = ref(false);
-const unexpectedError = ref(false);
 const errors = computed(() => form.errors as Record<string, string | undefined>);
-const permissionsError = computed(
-    () => errors.value.permissions ?? Object.entries(errors.value).find(([key]) => key.startsWith('permissions.'))?.[1],
-);
-
 const submit = async () => {
     if (form.processing || !props.selected || !canManage.value) return;
 
-    noChanges.value = false;
     if (!isDirty.value) {
-        noChanges.value = true;
+        toast.info('Nenhuma alteração para salvar.');
         return;
     }
 
-    unexpectedError.value = false;
     setSubmitting(true);
     form.put(route('admin.roles.permissions.update', props.selected.id), {
         preserveScroll: true,
@@ -189,12 +181,12 @@ onMounted(() => {
     removers.push(
         router.on('exception', (event) => {
             event.preventDefault();
-            unexpectedError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (event.detail.response.status >= 500) {
                 event.preventDefault();
-                unexpectedError.value = true;
+                toast.unexpected();
             }
         }),
     );
@@ -203,8 +195,6 @@ onUnmounted(() => removers.forEach((remove) => remove()));
 
 /* ---------- Apresentação ---------- */
 
-const successMessage = computed(() => page.props.flash?.success ?? null);
-const infoMessage = computed(() => page.props.flash?.info ?? null);
 
 const readOnlyMessage = computed(() => {
     switch (props.selected?.read_only_reason) {
@@ -318,17 +308,10 @@ const breadcrumbs = computed(() => [
 
                     <!-- Mensagens -->
                     <div id="matrix-feedback" tabindex="-1" class="space-y-3 focus:outline-none">
-                        <Alert v-if="successMessage" variant="success">{{ successMessage }}</Alert>
-                        <Alert v-if="noChanges || infoMessage" variant="info">{{ infoMessage ?? 'Nenhuma alteração para salvar.' }}</Alert>
                         <Alert v-if="readOnlyMessage" variant="warning" title="Somente consulta">{{ readOnlyMessage }}</Alert>
                         <Alert v-if="errors.conflict" variant="danger" title="As permissões foram alteradas">
                             <p>{{ errors.conflict }}</p>
                             <Button variant="secondary" size="sm" class="mt-3" @click="reloadCurrent">Recarregar dados atuais</Button>
-                        </Alert>
-                        <Alert v-if="permissionsError" variant="danger" title="Não foi possível salvar">{{ permissionsError }}</Alert>
-                        <Alert v-if="errors.version" variant="danger" title="Não foi possível salvar">{{ errors.version }}</Alert>
-                        <Alert v-if="unexpectedError" variant="danger" title="Não foi possível salvar as permissões">
-                            Ocorreu uma falha inesperada e nada foi gravado. Verifique sua conexão e tente novamente.
                         </Alert>
                         <Alert v-if="selected.permissions.length === 0 && !isDirty" variant="info">
                             Este papel não tem permissões associadas. Usuários vinculados a ele não acessam nenhuma operação protegida.

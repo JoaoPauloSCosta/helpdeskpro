@@ -70,7 +70,6 @@ const hasNoRoles = computed(() => props.summary.total === 0);
 /** A coluna de ação só aparece quando há algum papel que o operador pode editar (PER-03). */
 const showEdit = computed(() => rows.value.some((role) => role.can_edit));
 const showActions = computed(() => showEdit.value || props.can.matrix);
-const successMessage = computed(() => page.props.flash?.success ?? null);
 const formatCount = (value: number) => value.toLocaleString('pt-BR');
 const count = (value: number, singular: string, plural: string) => `${formatCount(value)} ${value === 1 ? singular : plural}`;
 
@@ -144,8 +143,6 @@ const breadcrumbs = computed(() => [
             </Card>
 
             <!-- Confirmação vinda de outra tela, só depois da gravação real -->
-            <Alert v-if="successMessage" variant="success">{{ successMessage }}</Alert>
-
             <Alert v-if="loadError" variant="danger" title="Não foi possível carregar os papéis">
                 <p>Verifique sua conexão e tente novamente.</p>
                 <Button variant="secondary" size="sm" class="mt-3" @click="retry">Tentar novamente</Button>

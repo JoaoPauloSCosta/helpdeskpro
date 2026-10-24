@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
@@ -8,6 +8,7 @@ import Modal from '@/Components/Modal.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import TicketNumber from '@/Components/TicketNumber.vue';
 import type { TicketCloseForm, TicketDetail, TicketResolution } from '@/lib/ticket';
+import { useToast } from '@/composables/useToast';
 
 /**
  * Encerramento (CHA-11). O backend revalida permissão, acesso e status atual ao gravar; autor,
@@ -26,12 +27,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>();
 
+const toast = useToast();
 const form = useForm({
     // Status visto ao abrir o modal; o servidor recusa se ele mudou nesse meio-tempo.
     expected_status: '',
 });
 
-const sendError = ref(false);
 let submitting = false;
 
 const errors = computed(() => form.errors as Record<string, string | undefined>);
@@ -41,7 +42,6 @@ watch(
     (open) => {
         if (!open) return;
         form.clearErrors();
-        sendError.value = false;
         form.expected_status = props.closing.current;
     },
 );
@@ -49,7 +49,6 @@ watch(
 const submit = () => {
     if (form.processing || !props.allowed) return;
 
-    sendError.value = false;
     submitting = true;
     form.post(route('tickets.closing.store', props.ticket.number), {
         preserveScroll: true,
@@ -73,12 +72,12 @@ onMounted(() => {
         router.on('exception', (event) => {
             if (!submitting) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (!submitting || event.detail.response.status < 500) return;
             event.preventDefault();
-            sendError.value = true;
+            toast.unexpected();
         }),
     );
 });
@@ -121,12 +120,6 @@ onUnmounted(() => removers.forEach((remove) => remove()));
                 <Alert v-else-if="!allowed" variant="warning" title="Encerramento indisponível">
                     Este chamado não pode ser encerrado por você no estado atual.
                 </Alert>
-                <Alert v-if="errors.status" variant="danger">{{ errors.status }}</Alert>
-                <Alert v-if="errors.expected_status" variant="danger">{{ errors.expected_status }}</Alert>
-                <Alert v-if="sendError" variant="danger" title="Não foi possível concluir">
-                    Verifique sua conexão e tente novamente. Nenhuma alteração foi presumida.
-                </Alert>
-
                 <Alert variant="info">
                     O status será alterado de Resolvido para Encerrado. A ação ficará registrada no histórico de auditoria,
                     e a solução, os comentários e as informações de SLA serão preservados.

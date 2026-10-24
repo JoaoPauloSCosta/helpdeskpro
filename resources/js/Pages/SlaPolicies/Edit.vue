@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import Alert from '@/Components/Alert.vue';
 import Badge from '@/Components/Badge.vue';
 import Breadcrumbs from '@/Components/Breadcrumbs.vue';
@@ -26,6 +26,7 @@ import {
 } from '@/lib/sla';
 import type { Option } from '@/lib/ticket';
 import { formatShortDate } from '@/lib/user';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     policy: SlaPolicyEditTarget;
@@ -35,7 +36,7 @@ const props = defineProps<{
     version: string;
 }>();
 
-const page = usePage();
+const toast = useToast();
 
 /* ---------- Formulário ---------- */
 
@@ -52,9 +53,6 @@ const activationConflictMessage = computed(
 
 const otherError = (key: 'conflict' | 'version') => (form.errors as Record<string, string | undefined>)[key];
 
-const noChanges = ref(false);
-const serverInfo = computed(() => page.props.flash?.info ?? null);
-const unexpectedError = ref(false);
 
 const validate = (): boolean => {
     const errors: Partial<Record<Exclude<SlaPolicyFormField, 'priority'>, string>> = slaPolicyFormErrors(form, props.limits);
@@ -80,7 +78,6 @@ const confirmStatusOpen = ref(false);
 
 const send = () => {
     confirmStatusOpen.value = false;
-    unexpectedError.value = false;
     setSubmitting(true);
 
     form.transform((data) => ({
@@ -97,12 +94,12 @@ const send = () => {
 const submit = () => {
     if (form.processing) return;
 
-    noChanges.value = false;
     if (changes.value.length === 0) {
-        noChanges.value = true;
+        toast.info('Nenhuma alteração para salvar.');
         return;
     }
     if (!validate()) {
+        toast.formErrors();
         focusFirstError();
         return;
     }
@@ -119,7 +116,6 @@ const reloadCurrent = () => {
 };
 
 const clearError = (field: Exclude<SlaPolicyFormField, 'priority'>) => {
-    noChanges.value = false;
     if (form.errors[field]) form.clearErrors(field);
 };
 
@@ -164,12 +160,12 @@ onMounted(() => {
     removers.push(
         router.on('exception', (event) => {
             event.preventDefault();
-            unexpectedError.value = true;
+            toast.unexpected();
         }),
         router.on('invalid', (event) => {
             if (event.detail.response.status >= 500) {
                 event.preventDefault();
-                unexpectedError.value = true;
+                toast.unexpected();
             }
         }),
     );
@@ -222,18 +218,6 @@ const breadcrumbs = [
                 <Alert v-if="otherError('conflict')" variant="danger" title="A política foi alterada">
                     <p>{{ otherError('conflict') }}</p>
                     <Button variant="secondary" size="sm" class="mt-3" @click="reloadCurrent">Recarregar dados atuais</Button>
-                </Alert>
-
-                <Alert v-if="otherError('version')" variant="danger" title="Não foi possível salvar">
-                    {{ otherError('version') }}
-                </Alert>
-
-                <Alert v-if="unexpectedError" variant="danger" title="Não foi possível salvar as alterações">
-                    Ocorreu uma falha inesperada e nada foi gravado. Verifique sua conexão e tente novamente.
-                </Alert>
-
-                <Alert v-if="noChanges || serverInfo" variant="info">
-                    {{ serverInfo ?? 'Nenhuma alteração para salvar.' }}
                 </Alert>
 
                 <!-- Metas -->
