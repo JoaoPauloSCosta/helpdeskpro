@@ -35,18 +35,9 @@ defineProps<{
                     alt="Help Desk Pro"
                     class="mx-auto mb-10 h-auto w-64"
                 />
-
-                <p
-                    class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/95"
-                >
-                    <span
-                        class="h-2 w-2 rounded-full bg-success-border ring-4 ring-success-border/20"
-                        aria-hidden="true"
-                    />
-                    SUPORTE MAIS SIMPLES
-                </p>
+                
                 <h1 class="mb-3.5 text-3xl font-bold leading-tight tracking-tight lg:text-4xl">
-                    Seu suporte.<br />Mais organizado.
+                    Seu suporte<br />Mais organizado.
                 </h1>
                 <p class="mx-auto max-w-xs text-[15px] leading-relaxed text-white/85">
                     Centralize solicitações, acompanhe chamados e resolva problemas com mais
