@@ -41,16 +41,9 @@ class UpdateRolePermissions
                 return ['added' => [], 'removed' => []];
             }
 
-            // Permissões administrativas só entram ou saem por quem também as possui.
-            $notGrantable = array_diff(
-                array_intersect([...$added, ...$removed], Permission::ADMINISTRATIVE),
-                $operator->effectivePermissions(),
-            );
-
-            if ($notGrantable !== []) {
-                throw new PermissionsNotGrantable(
-                    Permission::whereIn('slug', $notGrantable)->orderBy('name')->pluck('name')->all(),
-                );
+            // Trava contra bloqueio: quem edita o próprio papel não retira dele o acesso a esta tela.
+            if ($role->id === $operator->role_id && in_array('roles.manage', $removed, true)) {
+                throw new PermissionsNotGrantable([Permission::where('slug', 'roles.manage')->value('name')]);
             }
 
             $ids = Permission::whereIn('slug', [...$added, ...$removed])->pluck('id', 'slug');

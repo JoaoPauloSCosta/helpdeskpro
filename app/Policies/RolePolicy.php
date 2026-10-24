@@ -36,20 +36,12 @@ class RolePolicy
     }
 
     /**
-     * Associação de permissões na matriz (PER-04). Além de `roles.manage`:
-     *
-     * - o operador não altera o próprio papel, para não se conceder poderes nem remover o próprio
-     *   acesso por engano (mesma decisão do ADM-03 para o papel da própria conta);
-     * - o papel precisa ser um que o operador poderia atribuir (Role::isGrantableBy()): quem não
-     *   possui as permissões administrativas de um papel não as retira dele.
-     *
-     * Cada permissão administrativa adicionada ou removida também precisa estar entre as do
-     * operador (verificado em UpdateRolePermissions). A consulta da matriz só exige `viewAny`.
+     * Associação de permissões na matriz (PER-04). Quem tem `roles.manage` (Administrador e Super
+     * administrador) altera as permissões de qualquer papel, inclusive o próprio. A única trava, contra
+     * trancar o sistema, fica em UpdateRolePermissions: ninguém retira `roles.manage` do próprio papel.
      */
     public function managePermissions(User $user, Role $role): bool
     {
-        return $this->viewAny($user)
-            && $role->id !== $user->role_id
-            && $role->isGrantableBy($user);
+        return $this->viewAny($user);
     }
 }

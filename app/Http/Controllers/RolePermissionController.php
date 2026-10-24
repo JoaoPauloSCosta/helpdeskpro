@@ -72,8 +72,8 @@ class RolePermissionController extends Controller
             ]);
         } catch (PermissionsNotGrantable $e) {
             throw ValidationException::withMessages([
-                'permissions' => 'Você só pode conceder ou retirar permissões administrativas que também possui: '
-                    .implode(', ', $e->names).'.',
+                'permissions' => 'Você não pode retirar do seu próprio papel a permissão: '
+                    .implode(', ', $e->names).'. Peça a outro administrador, para não perder o acesso a esta tela.',
             ]);
         }
 
@@ -95,11 +95,7 @@ class RolePermissionController extends Controller
     {
         $slugs = $role->permissions->pluck('slug')->sort()->values();
 
-        $readOnlyReason = match (true) {
-            $operator->can('managePermissions', $role) => null,
-            $role->id === $operator->role_id => 'own_role',
-            default => 'not_grantable',
-        };
+        $readOnlyReason = $operator->can('managePermissions', $role) ? null : 'not_grantable';
 
         return [
             'id' => $role->id,
@@ -122,7 +118,6 @@ class RolePermissionController extends Controller
      */
     private function catalog(User $operator): array
     {
-        $owned = $operator->effectivePermissions();
         $labels = Permission::groupLabels();
 
         return Permission::query()
@@ -138,7 +133,7 @@ class RolePermissionController extends Controller
                     'name' => $permission->name,
                     'description' => $permission->description,
                     'administrative' => $permission->isAdministrative(),
-                    'grantable' => ! $permission->isAdministrative() || in_array($permission->slug, $owned, true),
+                    'grantable' => true,
                 ])->values()->all(),
             ])
             ->values()

@@ -303,33 +303,52 @@ test('extra fields cannot change the role or other roles', function () {
         ->and(roleSlugs($admin))->toHaveCount(11);
 });
 
-/* ---------- Escalada de privilégios ---------- */
+/* ---------- Quem pode alterar a matriz ---------- */
 
-test('operators cannot change their own role', function () {
+test('operators can change their own role, as long as they keep access to the matrix', function () {
     $adminRole = Role::where('slug', 'admin')->first();
 
     $this->actingAs($this->admin)
         ->get("/admin/roles/permissions?role={$adminRole->id}")
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->where('selected.can_manage', false)->where('selected.read_only_reason', 'own_role'));
+        ->assertInertia(fn (Assert $page) => $page->where('selected.can_manage', true)->where('selected.read_only_reason', null));
 
-    putMatrix($this->admin, $adminRole, matrixData($adminRole, [...roleSlugs($adminRole), 'tickets.close']))->assertForbidden();
-    putMatrix($this->admin, $adminRole, matrixData($adminRole, []))->assertForbidden();
+    putMatrix($this->admin, $adminRole, matrixData($adminRole, [...roleSlugs($adminRole), 'tickets.close']))->assertSessionHasNoErrors();
+    expect(roleSlugs($adminRole))->toContain('tickets.close');
 
-    expect(roleSlugs($adminRole))->toHaveCount(11);
+    // Trava contra bloqueio: retirar `roles.manage` do próprio papel é recusado.
+    putMatrix($this->admin->fresh(), $adminRole, matrixData($adminRole, array_diff(roleSlugs($adminRole), ['roles.manage'])))
+        ->assertSessionHasErrors('permissions');
+    expect(roleSlugs($adminRole))->toContain('roles.manage');
 });
 
-test('administrative permissions the operator lacks cannot be granted', function () {
-    $operator = matrixOperatorWith(['roles.manage']);
+test('administrators and super administrators change the permissions of every role', function () {
+    // Papel personalizado, como o "Super administrador": tem `roles.manage` e administra qualquer papel.
+    $superRole = Role::create(['name' => 'Super administrador', 'slug' => 'super-admin', 'is_system' => false]);
+    $superRole->permissions()->attach(Permission::pluck('id'), ['created_at' => now()]);
+    $super = User::factory()->create(['role_id' => $superRole->id]);
 
-    // O Técnico tem `audit.view`, que o operador não possui: a matriz dele fica somente leitura para o operador.
-    $requester = Role::where('slug', 'requester')->first();
+    foreach ([$this->admin, $super] as $operator) {
+        foreach (Role::where('id', '!=', $operator->role_id)->get() as $target) {
+            $this->actingAs($operator)->get("/admin/roles/permissions?role={$target->id}")
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->where('selected.can_manage', true));
 
-    putMatrix($operator, $requester, matrixData($requester, ['users.manage', 'sla.manage']))
-        ->assertSessionHasErrors(['permissions' => 'Você só pode conceder ou retirar permissões administrativas que também possui: Gerenciar políticas de SLA, Gerenciar usuários.']);
+            $slugs = roleSlugs($target);
+            putMatrix($operator, $target, matrixData($target, array_values(array_unique([...$slugs, 'audit.view', 'reports.view_performance']))))->assertSessionHasNoErrors();
+            putMatrix($operator, $target->fresh(), matrixData($target->fresh(), $slugs))->assertSessionHasNoErrors();
+            expect(roleSlugs($target))->toBe(array_values($slugs));
+        }
+    }
+});
 
-    expect(roleSlugs($requester))->toBe([])
-        ->and(AuditLog::count())->toBe(0);
+test('without roles.manage nobody reaches the matrix', function () {
+    $operator = matrixOperatorWith(['users.manage', 'audit.view']);
+    $role = Role::where('slug', 'requester')->first();
+
+    $this->actingAs($operator)->get('/admin/roles/permissions')->assertForbidden();
+    putMatrix($operator, $role, matrixData($role, ['tickets.close']))->assertForbidden();
+    expect(roleSlugs($role))->toBe([]);
 });
 
 test('operational permissions can be granted without holding them', function () {
@@ -353,33 +372,12 @@ test('administrative permissions the operator holds can be granted and removed',
     expect(roleSlugs($this->technician))->not->toContain('users.manage');
 });
 
-test('roles with administrative permissions the operator lacks are read only', function () {
+test('the catalog lets operators with roles.manage grant every permission', function () {
     $operator = matrixOperatorWith(['roles.manage']);
-    $manager = Role::where('slug', 'manager')->first();
-
-    $this->actingAs($operator)
-        ->get("/admin/roles/permissions?role={$manager->id}")
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('selected.can_manage', false)
-            ->where('selected.read_only_reason', 'not_grantable'));
-
-    // Gestor tem `audit.view`, que o operador não possui: nem a parte operacional pode ser mexida.
-    putMatrix($operator, $manager, matrixData($manager, ['tickets.close']))->assertForbidden();
-
-    expect(roleSlugs($manager))->toHaveCount(12);
-});
-
-test('the catalog marks which permissions the operator can grant', function () {
-    $operator = matrixOperatorWith(['roles.manage', 'users.manage']);
     $catalog = collect($this->actingAs($operator)->get('/admin/roles/permissions')->viewData('page')['props']['catalog'])
-        ->flatMap(fn ($group) => $group['permissions'])->keyBy('slug');
+        ->flatMap(fn ($group) => $group['permissions']);
 
-    expect($catalog['users.manage']['grantable'])->toBeTrue()
-        ->and($catalog['roles.manage']['grantable'])->toBeTrue()
-        ->and($catalog['sla.manage']['grantable'])->toBeFalse()
-        ->and($catalog['audit.view']['grantable'])->toBeFalse()
-        ->and($catalog['tickets.close']['grantable'])->toBeTrue();
+    expect($catalog->every(fn ($permission) => $permission['grantable']))->toBeTrue();
 });
 
 /* ---------- Auditoria e consistência ---------- */

@@ -5,7 +5,7 @@ namespace App\Actions\Roles;
 use RuntimeException;
 
 /**
- * A alteração adiciona ou remove permissões administrativas que o operador não possui (PER-04).
+ * A alteração retiraria do operador o próprio acesso à gestão de papéis (PER-04).
  */
 class PermissionsNotGrantable extends RuntimeException
 {
@@ -14,6 +14,6 @@ class PermissionsNotGrantable extends RuntimeException
      */
     public function __construct(public readonly array $names)
     {
-        parent::__construct('Permissões administrativas fora do alcance do operador.');
+        parent::__construct('Alteração bloqueada: o operador perderia o acesso à gestão de papéis.');
     }
 }
