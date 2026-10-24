@@ -1,0 +1,21 @@
+.git
+.claude
+.env
+.env.*
+node_modules
+vendor
+public/build
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+tests
+docs
+Dockerfile
+docker-compose.yml
+bootstrap/cache/*.php
+
+# Dump do banco (dados reais; nunca versionar nem copiar para a imagem)
+/helpdesk.sql
+public/storage
+public/hot

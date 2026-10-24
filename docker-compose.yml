@@ -1,0 +1,51 @@
+x-app: &app
+  build:
+    context: .
+    target: app
+  image: helpdesk-pro:latest
+  env_file: .env.docker
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+  volumes:
+    - storage:/var/www/html/storage
+
+services:
+  app:
+    <<: *app
+    ports:
+      - "8080:80"
+
+  queue:
+    <<: *app
+    user: www-data
+    entrypoint: ["entrypoint.sh"]
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600"]
+    depends_on:
+      - app
+
+  # Substitui o Agendador do Windows: executa schedule:run (motor de SLA) a cada minuto.
+  scheduler:
+    <<: *app
+    user: www-data
+    entrypoint: ["entrypoint.sh"]
+    command: ["sh", "-c", "while true; do php artisan schedule:run --no-interaction; sleep 60; done"]
+    depends_on:
+      - app
+
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    env_file: .env.docker
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dbdata:
+  storage:
