@@ -25,3 +25,8 @@ Thumbs.db
 
 # Documentação interna (somente ambiente local)
 /docs
+
+.env.docker
+
+# Dump do banco (dados reais; nunca versionar nem copiar para a imagem)
+/helpdesk.sql
