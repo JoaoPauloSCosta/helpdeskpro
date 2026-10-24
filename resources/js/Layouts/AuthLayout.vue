@@ -36,9 +36,9 @@ defineProps<{
                     class="mx-auto mb-10 h-auto w-64"
                 />
                 
-                <h1 class="mb-3.5 text-3xl font-bold leading-tight tracking-tight lg:text-4xl">
-                    Seu suporte<br />Mais organizado.
-                </h1>
+                <h2 class="mb-3.5 text-3xl font-bold leading-tight tracking-tight lg:text-4xl">
+                    Seu suporte mais organizado.
+                </h2>
                 <p class="mx-auto max-w-xs text-[15px] leading-relaxed text-white/85">
                     Centralize solicitações, acompanhe chamados e resolva problemas com mais
                     agilidade — tudo em um só lugar.
