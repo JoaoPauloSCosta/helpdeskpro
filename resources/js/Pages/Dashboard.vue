@@ -332,12 +332,6 @@ const pending = computed(() => {
                             </p>
                         </Card>
                     </div>
-
-                    <Alert variant="info" title="Indicadores ainda indisponíveis">
-                        O tempo médio de primeira resposta e o tempo efetivo médio de resolução dependem do cálculo
-                        dos prazos de SLA, que ainda não é feito na abertura dos chamados. Eles serão exibidos quando
-                        esse cálculo existir.
-                    </Alert>
                 </template>
             </div>
         </div>

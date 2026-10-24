@@ -146,10 +146,6 @@ const breadcrumbs = [
                         Esta política está inativa e a prioridade <strong class="font-medium text-neutral-900">{{ policy.priority }}</strong>
                         não tem nenhuma política ativa no momento.
                     </p>
-                    <p class="text-xs text-neutral-500">
-                        O cálculo de prazos nos chamados ainda não utiliza as políticas de SLA; consultar ou alterar uma política não
-                        modifica nenhum chamado.
-                    </p>
                 </div>
             </Card>
 
