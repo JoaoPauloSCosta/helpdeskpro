@@ -13,7 +13,11 @@ export default defineConfig({
               port: 5173,
               strictPort: true,
               hmr: { host: 'localhost' },
-              watch: { usePolling: true },
+              watch: {
+                  usePolling: true,
+                  interval: 1000,
+                  ignored: ['**/vendor/**', '**/storage/**', '**/node_modules/**', '**/public/build/**'],
+              },
           }
         : undefined,
     plugins: [

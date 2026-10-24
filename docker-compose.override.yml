@@ -12,6 +12,9 @@ x-dev: &dev
     LOG_CHANNEL: stderr
   volumes:
     - .:/var/www/html
+    # O vendor fica num volume do Docker: ler milhares de arquivos pequenos de uma
+    # pasta do Windows espelhada é ~160x mais lento e deixava a aplicação inutilizável.
+    - vendor:/var/www/html/vendor
     - ./docker/php.dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
 
 services:
@@ -35,6 +38,8 @@ services:
     volumes:
       - .:/app
       - node_modules:/app/node_modules
+      - vendor:/app/vendor
 
 volumes:
   node_modules:
+  vendor:
