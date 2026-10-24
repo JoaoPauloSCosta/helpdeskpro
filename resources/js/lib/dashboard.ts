@@ -18,16 +18,18 @@ export interface DashboardMetrics {
     total: number;
     /** Os oito status, na ordem do ciclo de vida, inclusive os zerados. */
     byStatus: DashboardCount<TicketStatus>[];
-    byPriority: DashboardCount<TicketPriority>[];
+    /** `null` na visão restrita do solicitante (RF-24). */
+    byPriority: DashboardCount<TicketPriority>[] | null;
     byDepartment: DashboardRanking;
     /** `value` `none`: chamados sem responsável. */
     byAssignee: DashboardRanking;
+    /** `null` na visão restrita do solicitante (RF-24). */
     sla: {
         /** Prazo de resolução vencido, em andamento ou na resolução. */
         overdue: number;
         /** Chamados com prazo de resolução gravado. Zero: o SLA ainda não foi apurado. */
         tracked: number;
-    };
+    } | null;
     /** Chamados com ao menos uma reabertura. */
     reopened: number;
     /** Tempos médios em segundos; `average_seconds` nulo quando nenhum chamado tem o dado. */

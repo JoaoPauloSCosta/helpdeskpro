@@ -4,6 +4,7 @@ namespace App\Http\Requests\Tickets;
 
 use App\Enums\CommentVisibility;
 use App\Models\TicketComment;
+use App\Http\Requests\Concerns\Attachments;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -31,6 +32,7 @@ class StoreTicketCommentRequest extends FormRequest
         return [
             'body' => ['required', 'string', 'max:'.TicketComment::BODY_MAX_LENGTH],
             'visibility' => ['nullable', Rule::enum(CommentVisibility::class)],
+            ...Attachments::rules(),
         ];
     }
 
@@ -41,6 +43,7 @@ class StoreTicketCommentRequest extends FormRequest
             'body.string' => 'Escreva uma mensagem válida.',
             'body.max' => 'A mensagem pode ter no máximo :max caracteres.',
             'visibility.enum' => 'Tipo de mensagem inválido.',
+            ...Attachments::messages(),
         ];
     }
 

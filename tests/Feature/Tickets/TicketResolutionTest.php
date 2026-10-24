@@ -453,14 +453,19 @@ test('the recorded solution is shown to everyone with access to the ticket', fun
     foreach ([$this->requester, $this->tech, $this->manager] as $user) {
         $this->actingAs($user)
             ->get("/tickets/{$this->ticket->ticket_number}")
-            ->assertInertia(fn (Assert $page) => $page
-                ->where('ticket.status', 'Resolvido')
-                ->where('resolution', [
-                    'summary' => SUMMARY,
-                    'resolved_at' => now()->toIso8601String(),
-                    'author' => 'Carlos Lima',
-                ])
-                ->where('sla.resolution.met_at', now()->toIso8601String()));
+            ->assertInertia(function (Assert $page) use ($user) {
+                $page->where('ticket.status', 'Resolvido')
+                    ->where('resolution', [
+                        'summary' => SUMMARY,
+                        'resolved_at' => now()->toIso8601String(),
+                        'author' => 'Carlos Lima',
+                    ]);
+
+                // O solicitante não recebe SLA (RF-24).
+                $user->is($this->requester)
+                    ? $page->where('sla', null)
+                    : $page->where('sla.resolution.met_at', now()->toIso8601String());
+            });
     }
 
     $outsider = User::factory()->withRole('requester')->create();

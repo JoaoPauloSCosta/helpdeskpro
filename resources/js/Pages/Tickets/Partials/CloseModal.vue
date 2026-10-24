@@ -121,8 +121,7 @@ onUnmounted(() => removers.forEach((remove) => remove()));
                     Este chamado não pode ser encerrado por você no estado atual.
                 </Alert>
                 <Alert variant="info">
-                    O status será alterado de Resolvido para Encerrado. A ação ficará registrada no histórico de auditoria,
-                    e a solução, os comentários e as informações de SLA serão preservados.
+                    O status será alterado de Resolvido para Encerrado. A solução e os comentários serão preservados.
                 </Alert>
             </div>
 

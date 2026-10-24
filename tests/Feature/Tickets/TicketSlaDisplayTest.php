@@ -22,14 +22,14 @@ beforeEach(function () {
     $this->tech = User::factory()->withRole('technician')->create();
     $this->manager = User::factory()->withRole('manager')->create();
 
-    // Alta: 30 min de primeira resposta e 8h de resolução. Média e as demais não têm política.
-    $this->policy = SlaPolicy::factory()->create(['priority' => 'high', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
+    // O solicitante abre sempre em Média (RF-05): 30 min de primeira resposta e 8h de resolução. As demais não têm política.
+    $this->policy = SlaPolicy::factory()->create(['priority' => 'medium', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
 
     $this->travelTo(Carbon::parse('2026-10-21 08:00:00'));
 });
 
 /** Abre o chamado pelo fluxo real (POST /tickets), para que os prazos venham do motor. */
-function openRealTicket(string $priority = 'high', string $at = '2026-10-21 08:00:00'): Ticket
+function openRealTicket(string $at = '2026-10-21 08:00:00'): Ticket
 {
     test()->travelTo(Carbon::parse($at));
     $category = TicketCategory::factory()->create();
@@ -38,7 +38,6 @@ function openRealTicket(string $priority = 'high', string $at = '2026-10-21 08:0
         'title' => 'Chamado de teste '.Str::random(4),
         'description' => 'Descrição do chamado.',
         'category_id' => $category->id,
-        'priority' => $priority,
         'submission_token' => (string) Str::uuid(),
     ])->assertSessionHasNoErrors();
 
@@ -66,7 +65,7 @@ test('the details page shows the target, remaining time and overdue time from th
     $ticket = openRealTicket();
 
     $this->travelTo(Carbon::parse('2026-10-21 08:10:00'));
-    $sla = slaOf($this->requester, $ticket);
+    $sla = slaOf($this->manager, $ticket);
 
     expect($sla['resolution'])->toMatchArray([
         'state' => 'on_track',
@@ -80,7 +79,7 @@ test('the details page shows the target, remaining time and overdue time from th
     ]);
 
     $this->travelTo(Carbon::parse('2026-10-21 16:35:00'));
-    $sla = slaOf($this->requester, $ticket);
+    $sla = slaOf($this->manager, $ticket);
 
     expect($sla['resolution'])->toMatchArray(['state' => 'overdue', 'remaining_seconds' => -35 * 60])
         ->and($sla['firstResponse'])->toMatchArray(['state' => 'overdue']);
@@ -92,7 +91,7 @@ test('the first response and the breach history appear on the details page', fun
     $this->travelTo(Carbon::parse('2026-10-21 08:10:00'));
     $this->actingAs($this->tech)->post("/tickets/{$ticket->ticket_number}/comments", ['body' => 'Olá'])->assertSessionHasNoErrors();
 
-    expect(slaOf($this->requester, $ticket)['firstResponse'])->toMatchArray([
+    expect(slaOf($this->manager, $ticket)['firstResponse'])->toMatchArray([
         'state' => 'met',
         'met_at' => '2026-10-21T08:10:00+00:00',
         // Folga em relação ao prazo (08:30): 20 min.
@@ -103,7 +102,7 @@ test('the first response and the breach history appear on the details page', fun
     $this->travelTo(Carbon::parse('2026-10-21 17:00:00'));
     $this->actingAs($this->tech)->post("/tickets/{$ticket->ticket_number}/comments", ['body' => 'Ainda trabalhando'])->assertSessionHasNoErrors();
 
-    expect(slaOf($this->requester, $ticket)['resolution']['breached_at'])->toBe('2026-10-21T17:00:00+00:00');
+    expect(slaOf($this->manager, $ticket)['resolution']['breached_at'])->toBe('2026-10-21T17:00:00+00:00');
 });
 
 test('a paused ticket shows the frozen remaining time', function () {
@@ -114,16 +113,16 @@ test('a paused ticket shows the frozen remaining time', function () {
     app(RegisterTicketPending::class)($this->tech, $ticket->fresh(), TicketStatus::InProgress, TicketStatus::Pending, 'SEGREDO-MOTIVO-DA-PENDENCIA');
 
     $this->travelTo(Carbon::parse('2026-10-21 12:00:00'));
-    $props = inertiaProps($this->actingAs($this->requester)->get("/tickets/{$ticket->ticket_number}"));
-
     // 2h consumidas, 6h restantes, sem andar com o relógio parado.
-    expect($props['sla']['resolution'])->toMatchArray(['state' => 'paused', 'remaining_seconds' => 6 * 3600])
-        ->and($props['activePending'])->toBeNull();
+    expect(slaOf($this->manager, $ticket)['resolution'])->toMatchArray(['state' => 'paused', 'remaining_seconds' => 6 * 3600]);
 
-    // O solicitante não recebe o motivo da pendência nem na página nem no histórico de SLA.
-    $history = $this->actingAs($this->requester)->getJson("/tickets/{$ticket->ticket_number}/sla-history")->assertOk();
+    // O solicitante não recebe SLA, nem o motivo da pendência, na página ou no histórico de SLA (RF-24).
+    $props = inertiaProps($this->actingAs($this->requester)->get("/tickets/{$ticket->ticket_number}"));
+    $history = $this->actingAs($this->requester)->getJson("/tickets/{$ticket->ticket_number}/sla-history")->assertForbidden();
 
-    expect(json_encode($props))->not->toContain('SEGREDO-MOTIVO')
+    expect($props['sla'])->toBeNull()
+        ->and($props['activePending'])->toBeNull()
+        ->and(json_encode($props))->not->toContain('SEGREDO-MOTIVO')
         ->and($history->getContent())->not->toContain('SEGREDO-MOTIVO');
 });
 
@@ -137,7 +136,7 @@ test('the SLA history summarizes targets, consumption and breaches, and lists th
     $current = $ticket->fresh();
     app(UpdateTicketAttributes::class)($this->tech, $current, ['priority' => 'low'], $current->editVersion());
 
-    $history = $this->actingAs($this->requester)->getJson("/tickets/{$ticket->ticket_number}/sla-history")->assertOk()->json();
+    $history = $this->actingAs($this->manager)->getJson("/tickets/{$ticket->ticket_number}/sla-history")->assertOk()->json();
 
     expect($history['sla'])->toMatchArray([
         'priority' => 'Baixa',
@@ -158,23 +157,25 @@ test('the SLA history summarizes targets, consumption and breaches, and lists th
     expect($targets['resolution_minutes'])->toBe([480, 720])
         ->and($targets['first_response_minutes'])->toBe([30, 60])
         ->and($targets['consumed_seconds'])->toBe(9 * 3600)
-        // O solicitante não vê o autor dos eventos.
-        ->and($targets)->not->toHaveKey('author');
+        ->and($targets)->toHaveKey('consumed_seconds');
 });
 
 test('the SLA history tells when the ticket has no policy', function () {
-    $ticket = openRealTicket('medium');
+    $this->policy->update(['is_active' => false]);
+    $ticket = openRealTicket();
 
-    $summary = $this->actingAs($this->requester)->getJson("/tickets/{$ticket->ticket_number}/sla-history")->assertOk()->json('sla');
+    $summary = $this->actingAs($this->manager)->getJson("/tickets/{$ticket->ticket_number}/sla-history")->assertOk()->json('sla');
 
     expect($summary)->toMatchArray(['priority' => 'Média', 'has_policy' => false, 'consumed_seconds' => null, 'remaining_seconds' => null]);
 });
 
 test('the listing, the SLA filter and the CSV use the deadlines recorded by the engine', function () {
-    $late = openRealTicket('high', '2026-10-21 08:00:00');
+    $late = openRealTicket('2026-10-21 08:00:00');
     // Prazo às 17:00: às 16:30 faltam 30 de 480 min, então já está em risco (>= 80% consumido).
-    $atRisk = openRealTicket('high', '2026-10-21 09:00:00');
-    $free = openRealTicket('medium', '2026-10-21 09:30:00');
+    $atRisk = openRealTicket('2026-10-21 09:00:00');
+    // Sem política ativa, o chamado abre sem prazo (D2).
+    $this->policy->update(['is_active' => false]);
+    $free = openRealTicket('2026-10-21 09:30:00');
 
     $this->travelTo(Carbon::parse('2026-10-21 16:30:00'));
 
@@ -241,13 +242,19 @@ test('the dashboard times are null when no ticket has the data', function () {
 
 test('the dashboard times only consider tickets the user can access', function () {
     $mine = Ticket::factory()->create([
-        'requester_id' => $this->requester->id,
+        'assigned_to' => $this->tech->id,
+        'status' => TicketStatus::InProgress,
         'created_at' => '2026-10-21 08:00:00',
         'first_response_at' => '2026-10-21 08:10:00',
     ]);
-    Ticket::factory()->create(['created_at' => '2026-10-21 08:00:00', 'first_response_at' => '2026-10-21 12:00:00']);
+    Ticket::factory()->create([
+        'assigned_to' => User::factory()->withRole('technician')->create()->id,
+        'status' => TicketStatus::InProgress,
+        'created_at' => '2026-10-21 08:00:00',
+        'first_response_at' => '2026-10-21 12:00:00',
+    ]);
 
-    $times = inertiaProps($this->actingAs($this->requester)->get('/dashboard'))['metrics']['times'];
+    $times = inertiaProps($this->actingAs($this->tech)->get('/dashboard'))['metrics']['times'];
 
     expect($mine->exists)->toBeTrue()
         ->and($times['first_response'])->toBe(['count' => 1, 'average_seconds' => 600]);

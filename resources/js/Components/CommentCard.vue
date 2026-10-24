@@ -45,6 +45,7 @@ defineEmits<{ 'show-history': [] }>();
             </template>
         </header>
         <p class="mt-2 whitespace-pre-line text-sm text-neutral-900">{{ body }}</p>
+        <slot name="attachments" />
         <p v-if="internal" class="mt-2 text-xs text-warning-text">Não visível ao solicitante.</p>
     </article>
 </template>

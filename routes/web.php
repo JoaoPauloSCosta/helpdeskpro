@@ -5,11 +5,13 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SlaPolicyController;
 use App\Http\Controllers\TicketAssignmentController;
+use App\Http\Controllers\TicketAttachmentController;
 use App\Http\Controllers\TicketAuditController;
 use App\Http\Controllers\TicketClosingController;
 use App\Http\Controllers\TicketCommentController;
@@ -62,6 +64,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/tickets/{ticket}/comments/{comment}/versions', [TicketCommentVersionController::class, 'index'])
         ->whereNumber('comment')
         ->name('tickets.comments.versions.index');
+    // Download de anexos (RF-23): autorizado a cada requisição pelo chamado e pela visibilidade da mensagem.
+    Route::get('/tickets/{ticket}/attachments/{attachment}', [TicketAttachmentController::class, 'show'])
+        ->whereNumber('attachment')
+        ->middleware('throttle:60,1')
+        ->name('tickets.attachments.show');
     // Somente leitura (CHA-13): períodos de pausa e eventos que afetam o SLA do chamado.
     Route::get('/tickets/{ticket}/sla-history', [TicketSlaHistoryController::class, 'index'])->name('tickets.sla-history.index');
     // Somente leitura (CHA-14): eventos de auditoria do chamado, com `audit.view`.
@@ -100,6 +107,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/admin/roles/{role}/permissions', [RolePermissionController::class, 'update'])->whereNumber('role')->name('admin.roles.permissions.update');
     // PER-05: somente consulta, com `roles.manage`. Os detalhes abrem na própria listagem (`?selected=`).
     Route::get('/admin/permissions', [PermissionController::class, 'index'])->name('admin.permissions.index');
+
+    // RF-25: painel de desempenho dos técnicos, autorizado por `reports.view_performance` no controller.
+    Route::get('/performance', [PerformanceController::class, 'index'])->name('performance.index');
 
     // AUD-01: consulta de auditoria (RF-19), somente leitura, autorizada por `audit.view` no controller.
     // Os detalhes abrem na própria listagem (`?selected=`).

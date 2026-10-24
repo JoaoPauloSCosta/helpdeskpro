@@ -16,7 +16,7 @@ class TicketAuditController extends Controller
     private const PER_PAGE = 20;
 
     /** Eventos que se referem a uma mensagem e herdam a visibilidade dela (RF-11). */
-    private const COMMENT_EVENTS = [TicketEvent::CommentAdded, TicketEvent::CommentEdited];
+    private const COMMENT_EVENTS = [TicketEvent::CommentAdded, TicketEvent::CommentEdited, TicketEvent::AttachmentAdded];
 
     /**
      * CHA-14 — Histórico de auditoria do chamado (RF-19), somente leitura.
@@ -157,6 +157,14 @@ class TicketAuditController extends Controller
                     $this->detail('Prazo violado', $new['due_at'] ?? null, 'datetime'),
                     $this->detail('Violação registrada em', $new['breached_at'] ?? null, 'datetime'),
                 ],
+            ],
+            TicketEvent::AttachmentAdded => [
+                ($new['visibility'] ?? null) === CommentVisibility::Internal->value ? 'Anexos adicionados à nota interna' : 'Anexos adicionados',
+                'primary', null, [],
+                collect($new['files'] ?? [])->map(fn (array $file) => $this->detail(
+                    'Arquivo',
+                    ($file['name'] ?? 'arquivo').' ('.number_format(($file['size'] ?? 0) / 1024, 0, ',', '.').' KB)',
+                ))->all(),
             ],
             TicketEvent::CommentAdded, TicketEvent::CommentEdited => $this->commentEvent($event->event_type, $new),
         };

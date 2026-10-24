@@ -79,22 +79,34 @@ test('users only export the tickets they can see', function () {
     $assigned = Ticket::factory()->create(['assigned_to' => $technician->id, 'status' => TicketStatus::InProgress]);
     $other = Ticket::factory()->create(['status' => TicketStatus::InProgress, 'assigned_to' => User::factory()->withRole('technician')->create()->id]);
 
-    expect(exportedNumbers($this->actingAs($requester)->get('/tickets/export')))->toBe([$own->ticket_number])
+    // O solicitante exporta só os próprios chamados, sem a coluna de identificador (RF-24): confere pelo título.
+    $requesterRows = array_slice(csvRows($this->actingAs($requester)->get('/tickets/export')), 1);
+
+    expect(array_column($requesterRows, 0))->toBe([$own->title])
         // O técnico também enxerga os abertos e sem responsável (autoatribuição, RF-09), como na listagem.
         ->and(exportedNumbers($this->actingAs($technician)->get('/tickets/export')))->toEqualCanonicalizing([$assigned->ticket_number, $own->ticket_number])
         ->and(exportedNumbers($this->actingAs($technician)->get('/tickets/export')))->not->toContain($other->ticket_number)
         ->and(exportedNumbers($this->actingAs($this->manager)->get('/tickets/export')))->toContain($own->ticket_number, $assigned->ticket_number, $other->ticket_number);
 });
 
-test('filters cannot widen the scope: filtering by another user adds nothing', function () {
+test('filters cannot widen the scope: filtering by another category adds nothing', function () {
     $requester = User::factory()->withRole('requester')->create();
     $foreign = Ticket::factory()->create();
     Ticket::factory()->create(['requester_id' => $requester->id]);
 
-    $response = $this->actingAs($requester)->get('/tickets/export?'.http_build_query(['requester' => $foreign->requester_id]));
+    $response = $this->actingAs($requester)->get('/tickets/export?'.http_build_query(['category' => $foreign->category_id]));
 
     $response->assertNoContent();
 });
+
+test('the requester cannot filter the export by requester, priority, SLA or identifier', function (string $key, string $value) {
+    $requester = User::factory()->withRole('requester')->create();
+    Ticket::factory()->create(['requester_id' => $requester->id]);
+
+    $this->actingAs($requester)->getJson('/tickets/export?'.http_build_query([$key => $value]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors($key);
+})->with([['requester', '1'], ['priority', 'high'], ['sla', 'overdue'], ['number', 'HD-AAAAAAAA']]);
 
 /* ---------- Filtros ---------- */
 
@@ -199,7 +211,7 @@ test('headers and columns match the approved definition', function () {
 });
 
 test('it sends download headers with a safe, fixed file name', function () {
-    Ticket::factory()->create();
+    Ticket::factory()->create(['title' => 'Falha na rede']);
 
     $response = $this->actingAs($this->manager)->get('/tickets/export?title=a&filename=../../etc/passwd');
 

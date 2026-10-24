@@ -44,6 +44,8 @@ const props = defineProps<{
     sort: { key: TicketSortKey; direction: Direction };
     options: TicketFilterOptions;
     hasAnyTicket: boolean;
+    /** Visão restrita do solicitante (RF-24): sem identificador, solicitante, prioridade e SLA. */
+    restricted: boolean;
     can: { create: boolean };
 }>();
 
@@ -256,13 +258,13 @@ const chipLabel = (key: TicketFilterKey, value: string): string => {
         case 'title':
             return `Título: “${value}”`;
         case 'requester':
-            return `Solicitante: ${optionLabel(o.requesters, value)}`;
+            return `Solicitante: ${optionLabel(o.requesters ?? [], value)}`;
         case 'department':
             return `Departamento: ${optionLabel(o.departments, value)}`;
         case 'category':
             return `Categoria: ${optionLabel(o.categories, value)}`;
         case 'priority':
-            return `Prioridade: ${optionLabel(o.priorities, value)}`;
+            return `Prioridade: ${optionLabel(o.priorities ?? [], value)}`;
         case 'status':
             return `Status: ${optionLabel(o.statuses, value)}`;
         case 'assignee':
@@ -272,7 +274,7 @@ const chipLabel = (key: TicketFilterKey, value: string): string => {
         case 'opened_to':
             return `Aberto até ${formatDate(value)}`;
         case 'sla':
-            return `SLA: ${optionLabel(o.slaStates, value)}`;
+            return `SLA: ${optionLabel(o.slaStates ?? [], value)}`;
     }
 };
 
@@ -367,7 +369,7 @@ const mobileSort = computed({
                         id="ticket-advanced-filters"
                         class="mt-4 grid gap-4 border-t border-neutral-200 pt-4 sm:grid-cols-2 lg:grid-cols-4"
                     >
-                        <FormField label="Identificador" :error="errorFor('number')" v-slot="{ id, describedby, invalid }">
+                        <FormField v-if="!restricted" label="Identificador" :error="errorFor('number')" v-slot="{ id, describedby, invalid }">
                             <TextInput
                                 :id="id"
                                 v-model="form.number"
@@ -383,10 +385,10 @@ const mobileSort = computed({
                             <TextInput :id="id" v-model="form.title" maxlength="255" :aria-describedby="describedby" :invalid="invalid" />
                         </FormField>
 
-                        <FormField label="Solicitante" :error="errorFor('requester')" v-slot="{ id, describedby, invalid }">
+                        <FormField v-if="!restricted" label="Solicitante" :error="errorFor('requester')" v-slot="{ id, describedby, invalid }">
                             <Select :id="id" v-model="form.requester" :aria-describedby="describedby" :invalid="invalid">
                                 <option value="">Todos</option>
-                                <option v-for="o in options.requesters" :key="o.value" :value="o.value">{{ o.label }}</option>
+                                <option v-for="o in options.requesters ?? []" :key="o.value" :value="o.value">{{ o.label }}</option>
                             </Select>
                         </FormField>
 
@@ -404,10 +406,10 @@ const mobileSort = computed({
                             </Select>
                         </FormField>
 
-                        <FormField label="Prioridade" :error="errorFor('priority')" v-slot="{ id, describedby, invalid }">
+                        <FormField v-if="!restricted" label="Prioridade" :error="errorFor('priority')" v-slot="{ id, describedby, invalid }">
                             <Select :id="id" v-model="form.priority" :aria-describedby="describedby" :invalid="invalid">
                                 <option value="">Todas</option>
-                                <option v-for="o in options.priorities" :key="o.value" :value="o.value">{{ o.label }}</option>
+                                <option v-for="o in options.priorities ?? []" :key="o.value" :value="o.value">{{ o.label }}</option>
                             </Select>
                         </FormField>
 
@@ -448,10 +450,10 @@ const mobileSort = computed({
                             />
                         </FormField>
 
-                        <FormField label="Situação do SLA" :error="errorFor('sla')" v-slot="{ id, describedby, invalid }">
+                        <FormField v-if="!restricted" label="Situação do SLA" :error="errorFor('sla')" v-slot="{ id, describedby, invalid }">
                             <Select :id="id" v-model="form.sla" :aria-describedby="describedby" :invalid="invalid">
                                 <option value="">Todas</option>
-                                <option v-for="o in options.slaStates" :key="o.value" :value="o.value">{{ o.label }}</option>
+                                <option v-for="o in options.slaStates ?? []" :key="o.value" :value="o.value">{{ o.label }}</option>
                             </Select>
                         </FormField>
                     </div>
@@ -558,17 +560,17 @@ const mobileSort = computed({
                             <DataTable>
                                 <template #head>
                                     <tr class="whitespace-nowrap">
-                                        <SortableHeader label="ID" :direction="direction('number')" @sort="sortBy('number')" />
+                                        <SortableHeader v-if="!restricted" label="ID" :direction="direction('number')" @sort="sortBy('number')" />
                                         <SortableHeader label="Título" :direction="direction('title')" @sort="sortBy('title')" />
-                                        <th scope="col">Solicitante</th>
+                                        <th v-if="!restricted" scope="col">Solicitante</th>
                                         <th scope="col">Departamento</th>
                                         <th scope="col">Categoria</th>
-                                        <SortableHeader label="Prioridade" :direction="direction('priority')" @sort="sortBy('priority')" />
+                                        <SortableHeader v-if="!restricted" label="Prioridade" :direction="direction('priority')" @sort="sortBy('priority')" />
                                         <SortableHeader label="Status" :direction="direction('status')" @sort="sortBy('status')" />
                                         <SortableHeader label="Responsável" :direction="direction('assignee')" @sort="sortBy('assignee')" />
                                         <SortableHeader label="Abertura" :direction="direction('created_at')" @sort="sortBy('created_at')" />
                                         <SortableHeader label="Atualização" :direction="direction('updated_at')" @sort="sortBy('updated_at')" />
-                                        <th scope="col">SLA</th>
+                                        <th v-if="!restricted" scope="col">SLA</th>
                                         <!-- Fixa à direita para o botão ficar visível sem rolar a tabela. Por ser
                                              posicionada, também mantém o texto sr-only dentro da área com rolagem. -->
                                         <th v-if="showSelfAssign" scope="col" :class="actionColumnClass" class="bg-neutral-100">
@@ -578,16 +580,16 @@ const mobileSort = computed({
                                 </template>
 
                                 <tr v-for="ticket in rows" :key="ticket.number">
-                                    <td class="whitespace-nowrap"><TicketNumber :number="ticket.number" /></td>
+                                    <td v-if="!restricted" class="whitespace-nowrap"><TicketNumber :number="ticket.number" /></td>
                                     <td class="min-w-[14rem] font-medium">
                                         <Link :href="route('tickets.show', ticket.number)" :class="titleLinkClass">
                                             {{ ticket.title }}
                                         </Link>
                                     </td>
-                                    <td class="whitespace-nowrap text-neutral-600">{{ ticket.requester ?? '—' }}</td>
+                                    <td v-if="!restricted" class="whitespace-nowrap text-neutral-600">{{ ticket.requester ?? '—' }}</td>
                                     <td class="whitespace-nowrap text-neutral-600">{{ ticket.department ?? '—' }}</td>
                                     <td class="whitespace-nowrap text-neutral-600">{{ ticket.category ?? '—' }}</td>
-                                    <td><PriorityBadge :priority="ticket.priority" /></td>
+                                    <td v-if="!restricted"><PriorityBadge v-if="ticket.priority" :priority="ticket.priority" /></td>
                                     <td><StatusBadge :status="ticket.status" /></td>
                                     <td class="whitespace-nowrap">
                                         <span v-if="ticket.assignee" class="text-neutral-600">{{ ticket.assignee }}</span>
@@ -595,8 +597,8 @@ const mobileSort = computed({
                                     </td>
                                     <td class="whitespace-nowrap text-neutral-600">{{ formatDateTime(ticket.created_at) }}</td>
                                     <td class="whitespace-nowrap text-neutral-600">{{ formatDateTime(ticket.updated_at) }}</td>
-                                    <td class="whitespace-nowrap">
-                                        <SlaIndicator v-if="ticket.sla !== 'none'" :state="ticket.sla" />
+                                    <td v-if="!restricted" class="whitespace-nowrap">
+                                        <SlaIndicator v-if="ticket.sla && ticket.sla !== 'none'" :state="ticket.sla" />
                                         <span v-else class="text-xs text-neutral-500">Sem prazo definido</span>
                                     </td>
                                     <td
@@ -632,7 +634,7 @@ const mobileSort = computed({
                             <ul class="divide-y divide-neutral-200">
                                 <li v-for="ticket in rows" :key="ticket.number" class="space-y-2 p-4">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <TicketNumber :number="ticket.number" />
+                                        <TicketNumber v-if="!restricted" :number="ticket.number" />
                                         <StatusBadge :status="ticket.status" />
                                     </div>
                                     <p class="break-words text-sm font-medium text-neutral-900">
@@ -640,9 +642,9 @@ const mobileSort = computed({
                                             {{ ticket.title }}
                                         </Link>
                                     </p>
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <PriorityBadge :priority="ticket.priority" />
-                                        <SlaIndicator v-if="ticket.sla !== 'none'" :state="ticket.sla" />
+                                    <div v-if="!restricted" class="flex flex-wrap items-center gap-2">
+                                        <PriorityBadge v-if="ticket.priority" :priority="ticket.priority" />
+                                        <SlaIndicator v-if="ticket.sla && ticket.sla !== 'none'" :state="ticket.sla" />
                                         <span v-else class="text-xs text-neutral-500">Sem prazo definido</span>
                                     </div>
                                     <p class="text-xs text-neutral-500">

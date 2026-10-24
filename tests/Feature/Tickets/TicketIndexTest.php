@@ -110,7 +110,7 @@ test('filters and search never reveal tickets outside the scope', function () {
     $hidden = Ticket::factory()->create(['title' => 'Servidor fora do ar']);
 
     $byNumber = $this->actingAs($user)->get('/tickets?q='.$hidden->ticket_number);
-    $byFilter = $this->actingAs($user)->get('/tickets?number='.$hidden->ticket_number.'&department='.$hidden->department_id);
+    $byFilter = $this->actingAs($user)->get('/tickets?title='.urlencode($hidden->title).'&department='.$hidden->department_id);
 
     expect(listedNumbers($byNumber))->toBe([])
         ->and(listingProps($byNumber)['tickets']['total'])->toBe(0)
@@ -128,8 +128,22 @@ test('requester and assignee filter options come only from visible tickets', fun
 
     $options = listingProps($this->actingAs($user)->get('/tickets'))['options'];
 
-    expect(collect($options['requesters'])->pluck('label')->all())->toBe([$user->name])
+    // O solicitante não recebe a lista de solicitantes (RF-24); os responsáveis vêm só dos chamados visíveis.
+    expect($options)->not->toHaveKey('requesters')
         ->and(collect($options['assignees'])->pluck('label')->all())->toBe(['Técnico Visível']);
+});
+
+test('requester filter options for support users come only from visible tickets', function () {
+    $tech = User::factory()->withRole('technician')->create();
+    $visible = User::factory()->create(['name' => 'Solicitante Visível']);
+    $stranger = User::factory()->create(['name' => 'Pessoa Oculta']);
+
+    Ticket::factory()->create(['requester_id' => $visible->id, 'assigned_to' => $tech->id, 'status' => TicketStatus::InProgress]);
+    Ticket::factory()->create(['requester_id' => $stranger->id, 'assigned_to' => $stranger->id, 'status' => TicketStatus::InProgress]);
+
+    $options = listingProps($this->actingAs($tech)->get('/tickets'))['options'];
+
+    expect(collect($options['requesters'])->pluck('label')->all())->toBe(['Solicitante Visível']);
 });
 
 /* ---------- Dados expostos ---------- */

@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Tickets\StoreTicketAttachments;
 use App\Enums\CommentVisibility;
 use App\Enums\TicketEvent;
+use App\Http\Requests\Concerns\Attachments;
 use App\Http\Requests\Tickets\StoreTicketCommentRequest;
 use App\Models\Ticket;
 use App\Models\TicketComment;
@@ -25,7 +27,7 @@ class TicketCommentController extends Controller
      * depois de gravada ela não muda. Respondido (ou vencido) fora do prazo, a violação é registrada
      * aqui mesmo (RN-15), junto com a de resolução, se for o caso.
      */
-    public function store(StoreTicketCommentRequest $request, Ticket $ticket): RedirectResponse
+    public function store(StoreTicketCommentRequest $request, Ticket $ticket, StoreTicketAttachments $attachments): RedirectResponse
     {
         $comment = (new TicketComment)->fill($request->safe()->only('body'))->forceFill([
             'ticket_id' => $ticket->id,
@@ -33,21 +35,31 @@ class TicketCommentController extends Controller
             'visibility' => $request->visibility(),
         ]);
 
-        DB::transaction(function () use ($ticket, $comment, $request) {
-            $comment->save();
-            $this->registerSla($request->user(), $ticket, $comment);
+        // Arquivos não participam da transação: o que já foi gravado é removido se ela falhar.
+        $written = [];
 
-            $ticket->histories()->forceCreate([
-                'user_id' => $comment->user_id,
-                'event_type' => TicketEvent::CommentAdded,
-                'old_values' => null,
-                'new_values' => [
-                    'comment_id' => $comment->id,
-                    'visibility' => $comment->visibility->value,
-                ],
-                'created_at' => $comment->created_at,
-            ]);
-        });
+        try {
+            DB::transaction(function () use ($ticket, $comment, $request, $attachments, &$written) {
+                $comment->save();
+                $this->registerSla($request->user(), $ticket, $comment);
+                $attachments($request->user(), $ticket, $comment, Attachments::files($request), $written);
+
+                $ticket->histories()->forceCreate([
+                    'user_id' => $comment->user_id,
+                    'event_type' => TicketEvent::CommentAdded,
+                    'old_values' => null,
+                    'new_values' => [
+                        'comment_id' => $comment->id,
+                        'visibility' => $comment->visibility->value,
+                    ],
+                    'created_at' => $comment->created_at,
+                ]);
+            });
+        } catch (\Throwable $e) {
+            StoreTicketAttachments::purge($written);
+
+            throw $e;
+        }
 
         return to_route('tickets.show', $ticket);
     }

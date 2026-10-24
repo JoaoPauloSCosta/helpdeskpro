@@ -296,9 +296,14 @@ test('operators cannot grant roles with administrative permissions they lack', f
 
     expect(User::where('email', 'maria@example.com')->exists())->toBeFalse();
 
-    // Papéis só com permissões operacionais continuam disponíveis.
+    // O Técnico tem `audit.view` (RF-19, v1.8), que o operador não possui.
     $this->actingAs($operator)
         ->post('/admin/users', newUserData(['role_id' => roleId('technician')]))
+        ->assertSessionHasErrors('role_id');
+
+    // Papéis só com permissões operacionais continuam disponíveis.
+    $this->actingAs($operator)
+        ->post('/admin/users', newUserData(['role_id' => roleId('requester')]))
         ->assertSessionHasNoErrors();
 });
 
@@ -308,7 +313,7 @@ test('the form only offers roles the operator can grant', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->where(
             'roles',
-            fn ($roles) => collect($roles)->pluck('label')->sort()->values()->all() === ['Recursos Humanos', 'Solicitante', 'Técnico'],
+            fn ($roles) => collect($roles)->pluck('label')->sort()->values()->all() === ['Recursos Humanos', 'Solicitante'],
         ));
 });
 

@@ -151,7 +151,7 @@ onUnmounted(() => removers.forEach((remove) => remove()));
                 </FormField>
 
                 <Alert variant="info">
-                    O chamado voltará para Aberto. O histórico e os registros anteriores serão preservados, inclusive as informações de SLA.
+                    O chamado voltará para Aberto. A solução e os comentários anteriores serão preservados.
                 </Alert>
             </div>
 

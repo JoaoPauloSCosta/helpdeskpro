@@ -9,10 +9,12 @@ use App\Enums\SlaState;
 use App\Enums\TicketEvent;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
+use App\Http\Requests\Concerns\Attachments;
 use App\Http\Requests\Tickets\StoreTicketRequest;
 use App\Http\Requests\Tickets\TicketIndexRequest;
 use App\Models\Department;
 use App\Models\Ticket;
+use App\Models\TicketAttachment;
 use App\Models\TicketCategory;
 use App\Models\TicketComment;
 use App\Models\TicketSlaPause;
@@ -57,6 +59,8 @@ class TicketController extends Controller
         $now = now();
         // Elegibilidade do técnico calculada uma vez; a do chamado vem de cada linha (CHA-06).
         $userMaySelfAssign = $user->isEligibleAssignee();
+        // Visão restrita do solicitante (RF-24): sem solicitante, prioridade e SLA nos dados enviados.
+        $restricted = $user->hasRestrictedTicketView();
 
         // O escopo de acesso vem primeiro: filtros, ordenação, contagem e paginação atuam sobre ele.
         $tickets = Ticket::query()
@@ -73,26 +77,30 @@ class TicketController extends Controller
             ->paginate(self::PER_PAGE)
             ->withQueryString()
             ->through(fn (Ticket $ticket) => [
+                // Na visão restrita o identificador só monta o link; a tela não o exibe.
                 'number' => $ticket->ticket_number,
                 'title' => $ticket->title,
-                'requester' => $ticket->requester?->name,
                 'department' => $ticket->department?->name,
                 'category' => $ticket->category?->name,
-                'priority' => $ticket->priority->label(),
                 'status' => $ticket->status->label(),
                 'assignee' => $ticket->assignee?->name,
                 'created_at' => $ticket->created_at?->toIso8601String(),
                 'updated_at' => $ticket->updated_at?->toIso8601String(),
-                'sla' => $ticket->slaState($now)->value,
                 // Só a exibição do botão; o backend revalida tudo ao assumir.
                 'can_self_assign' => $userMaySelfAssign && TicketPolicy::isSelfAssignable($ticket),
+                ...($restricted ? [] : [
+                    'requester' => $ticket->requester?->name,
+                    'priority' => $ticket->priority->label(),
+                    'sla' => $ticket->slaState($now)->value,
+                ]),
             ]);
 
         return Inertia::render('Tickets/Index', [
             'tickets' => $tickets,
             'filters' => $filters,
             'sort' => ['key' => $sort, 'direction' => $direction],
-            'options' => $this->filterOptions($user),
+            'options' => $this->filterOptions($user, $restricted),
+            'restricted' => $restricted,
             // Distingue "nenhum chamado acessível" de "nenhum resultado para os filtros".
             'hasAnyTicket' => $filters === [] ? $tickets->total() > 0 : Ticket::visibleTo($user)->exists(),
             'can' => [
@@ -118,10 +126,6 @@ class TicketController extends Controller
                 ->get(['id', 'name'])
                 ->map(fn (TicketCategory $category) => ['value' => (string) $category->id, 'label' => $category->name])
                 ->all(),
-            'priorities' => array_map(
-                fn (TicketPriority $priority) => ['value' => $priority->value, 'label' => $priority->label()],
-                TicketPriority::cases(),
-            ),
             // Somente leitura: o autor e o departamento histórico são definidos pelo backend.
             'requester' => [
                 'name' => $user->name,
@@ -133,6 +137,7 @@ class TicketController extends Controller
                 'title' => Ticket::TITLE_MAX_LENGTH,
                 'description' => Ticket::DESCRIPTION_MAX_LENGTH,
             ],
+            'attachmentLimits' => $this->attachmentLimits(),
             // Identifica o envio para que repetições da mesma requisição não dupliquem o chamado.
             'submissionToken' => (string) Str::uuid(),
         ]);
@@ -157,7 +162,7 @@ class TicketController extends Controller
         }
 
         try {
-            $ticket = $openTicket($user, $request->safe()->only(StoreTicketRequest::FIELDS));
+            $ticket = $openTicket($user, $request->safe()->only(StoreTicketRequest::FIELDS), Attachments::files($request));
         } catch (TicketNumberUnavailable) {
             Cache::forget($key);
 
@@ -199,11 +204,13 @@ class TicketController extends Controller
         $ownsTicket = TicketPolicy::isOriginalRequester($user, $ticket);
         // Idem para o encerramento (CHA-11).
         $closes = $user->hasPermission('tickets.close');
+        $restricted = $user->hasRestrictedTicketView();
 
         $comments = $ticket->comments()
             ->visibleTo($user)
             ->select(['id', 'ticket_id', 'user_id', 'body', 'visibility', 'created_at'])
-            ->with('author:id,name')
+            // Os anexos vêm das mensagens que o usuário pode ler: o anexo herda a visibilidade (RF-23).
+            ->with(['author:id,name', 'attachments:id,ticket_comment_id,original_name,mime_type,size_bytes'])
             // Versões anteriores que o usuário pode ler (CHA-12); o conteúdo vem só sob demanda.
             ->withCount(['versions' => fn (Builder $query) => $query->visibleTo($user)])
             ->orderBy('created_at')
@@ -216,6 +223,7 @@ class TicketController extends Controller
                 'internal' => $comment->visibility === CommentVisibility::Internal,
                 'created_at' => $comment->created_at?->toIso8601String(),
                 'edited' => $comment->versions_count > 0,
+                'attachments' => $comment->attachments->map(fn (TicketAttachment $a) => $this->attachmentPayload($a))->all(),
             ]);
 
         return Inertia::render('Tickets/Show', [
@@ -223,19 +231,22 @@ class TicketController extends Controller
                 'number' => $ticket->ticket_number,
                 'title' => $ticket->title,
                 'description' => $ticket->description,
-                'requester' => $ticket->requester?->name,
                 'department' => $ticket->department?->name,
                 'category' => $ticket->category?->name,
-                'priority' => $ticket->priority->label(),
                 'status' => $ticket->status->label(),
                 'assignee' => $ticket->assignee?->name,
                 'created_at' => $ticket->created_at?->toIso8601String(),
                 'updated_at' => $ticket->updated_at?->toIso8601String(),
+                // Prioridade e solicitante ficam fora da visão restrita do solicitante (RF-24).
+                ...($restricted ? [] : [
+                    'requester' => $ticket->requester?->name,
+                    'priority' => $ticket->priority->label(),
+                ]),
             ],
             // Calculado no backend (SlaClock) a partir dos instantes gravados; sem política, tudo nulo.
             // `remaining_seconds` negativo: vencido há esse tempo. `breached_at` é o histórico (RN-15),
             // independente da situação atual.
-            'sla' => [
+            'sla' => $restricted ? null : [
                 'firstResponse' => [
                     'state' => $ticket->firstResponseSlaState($now)->value,
                     'due_at' => $ticket->first_response_due_at?->toIso8601String(),
@@ -259,6 +270,14 @@ class TicketController extends Controller
                 ],
             ],
             'comments' => $comments,
+            // Anexos da abertura (públicos).
+            'attachments' => $ticket->attachments()
+                ->whereNull('ticket_comment_id')
+                ->orderBy('id')
+                ->get(['id', 'original_name', 'mime_type', 'size_bytes'])
+                ->map(fn (TicketAttachment $a) => $this->attachmentPayload($a))
+                ->all(),
+            'attachmentLimits' => $this->attachmentLimits(),
             'can' => [
                 'comment' => $user->can('comment', $ticket),
                 'addInternalNote' => $user->can('addInternalNote', $ticket),
@@ -329,6 +348,27 @@ class TicketController extends Controller
                 : []),
             'limits' => ['comment' => TicketComment::BODY_MAX_LENGTH],
         ]);
+    }
+
+    private function attachmentPayload(TicketAttachment $attachment): array
+    {
+        return [
+            'id' => $attachment->id,
+            'name' => $attachment->original_name,
+            'type' => $attachment->mime_type,
+            'size' => $attachment->size_bytes,
+        ];
+    }
+
+    /** Limites e tipos dos anexos (RF-23), para a tela avisar antes do envio; o servidor valida de novo. */
+    private function attachmentLimits(): array
+    {
+        return [
+            'maxFiles' => config('attachments.max_files_per_upload'),
+            'maxFileBytes' => config('attachments.max_file_kb') * 1024,
+            'maxUploadBytes' => config('attachments.max_upload_kb') * 1024,
+            'extensions' => array_keys(config('attachments.types')),
+        ];
     }
 
     /** Efeito de uma transição da CHA-07, conforme o RF-10 e o RF-15.2. */
@@ -479,7 +519,7 @@ class TicketController extends Controller
      * Opções dos filtros, sempre a partir de dados reais. Solicitantes e responsáveis vêm
      * apenas dos chamados visíveis, para não revelar usuários fora do escopo.
      */
-    private function filterOptions(User $user): array
+    private function filterOptions(User $user, bool $restricted): array
     {
         $people = fn (string $column) => User::query()
             ->whereIn('id', Ticket::visibleTo($user)->whereNotNull("tickets.$column")->select("tickets.$column"))
@@ -504,12 +544,15 @@ class TicketController extends Controller
 
         return [
             'statuses' => $enum(TicketStatus::cases()),
-            'priorities' => $enum(TicketPriority::cases()),
-            'slaStates' => $enum(SlaState::cases()),
             'departments' => $catalog(Department::class),
             'categories' => $catalog(TicketCategory::class),
-            'requesters' => $people('requester_id'),
             'assignees' => $people('assigned_to'),
+            // Prioridade, SLA e solicitante não são oferecidos na visão restrita (RF-24).
+            ...($restricted ? [] : [
+                'priorities' => $enum(TicketPriority::cases()),
+                'slaStates' => $enum(SlaState::cases()),
+                'requesters' => $people('requester_id'),
+            ]),
         ];
     }
 }

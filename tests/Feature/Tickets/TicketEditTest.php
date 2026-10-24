@@ -315,10 +315,13 @@ test('the history is shown only to users with audit access', function () {
         ->and($events[0]['changes'])->toBe([['field' => 'Prioridade', 'from' => 'Média', 'to' => 'Crítica']])
         ->and($events[0]['author'])->toBe($this->manager->name);
 
-    foreach ([$this->requester, $this->tech] as $user) {
-        $this->actingAs($user)
-            ->get(editUrl($this->ticket))
-            ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', false));
-        $this->actingAs($user)->getJson(editUrl($this->ticket).'/audit')->assertForbidden();
-    }
+    $this->actingAs($this->requester)
+        ->get(editUrl($this->ticket))
+        ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', false));
+    $this->actingAs($this->requester)->getJson(editUrl($this->ticket).'/audit')->assertForbidden();
+
+    // O técnico responsável tem `audit.view` por padrão (RF-19, v1.8).
+    $this->actingAs($this->tech)
+        ->get(editUrl($this->ticket))
+        ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', true));
 });

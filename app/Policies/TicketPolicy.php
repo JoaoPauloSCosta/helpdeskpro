@@ -2,8 +2,10 @@
 
 namespace App\Policies;
 
+use App\Enums\CommentVisibility;
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
+use App\Models\TicketAttachment;
 use App\Models\User;
 
 class TicketPolicy
@@ -227,6 +229,30 @@ class TicketPolicy
     public function viewAudit(User $user, Ticket $ticket): bool
     {
         return $user->hasPermission('audit.view') && $this->view($user, $ticket);
+    }
+
+    /**
+     * Download de anexo (RF-23): o anexo é do chamado, o usuário acessa o chamado e vê a mensagem à qual
+     * o anexo pertence. Anexo da abertura é público; anexo de nota interna exige `tickets.view_internal_notes`
+     * (o anexo herda a visibilidade da mensagem, RN-21). Conferido a cada requisição.
+     */
+    public function viewAttachment(User $user, Ticket $ticket, TicketAttachment $attachment): bool
+    {
+        if ($attachment->ticket_id !== $ticket->id || ! $this->view($user, $ticket)) {
+            return false;
+        }
+
+        $comment = $attachment->comment;
+
+        return $comment === null
+            || $comment->visibility === CommentVisibility::Public
+            || $user->hasPermission('tickets.view_internal_notes');
+    }
+
+    /** Indicadores e histórico de SLA (CHA-13): fora da visão restrita do solicitante (RF-24). */
+    public function viewSla(User $user, Ticket $ticket): bool
+    {
+        return ! $user->hasRestrictedTicketView() && $this->view($user, $ticket);
     }
 
     private function canEditAttribute(User $user, Ticket $ticket, string $permission): bool

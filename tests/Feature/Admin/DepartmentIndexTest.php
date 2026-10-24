@@ -249,7 +249,7 @@ test('department administrators see the administration area without users.manage
     $operator = userWithOnly('departments.manage');
 
     $this->actingAs($operator)
-        ->get('/dashboard')
+        ->get('/profile')
         ->assertInertia(fn (Assert $page) => $page->where('auth.permissions', ['departments.manage']));
 
     // Sem a permissão, a listagem de usuários continua negada.

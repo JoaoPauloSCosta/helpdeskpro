@@ -235,7 +235,7 @@ test('role administrators see the administration area without other admin permis
     $operator = roleOperatorWithOnly('roles.manage');
 
     $this->actingAs($operator)
-        ->get('/dashboard')
+        ->get('/profile')
         ->assertInertia(fn (Assert $page) => $page->where('auth.permissions', ['roles.manage']));
 
     $this->actingAs($operator)->get('/admin/users')->assertForbidden();

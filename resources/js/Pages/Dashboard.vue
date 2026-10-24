@@ -90,6 +90,8 @@ const plural = (count: number, one: string, many: string) => `${number(count)} $
 
 const sla = computed(() => {
     const m = props.metrics!;
+    if (!m.sla) return null;
+
     if (m.sla.tracked === 0) {
         return { value: '—', hint: 'Nenhum chamado considerado tem prazo de SLA registrado.', href: undefined };
     }
@@ -250,6 +252,7 @@ const pending = computed(() => {
                                 :href="listing()"
                             />
                             <StatCard
+                                v-if="sla"
                                 icon="clock"
                                 label="Fora do SLA de resolução"
                                 :value="sla.value"
@@ -291,7 +294,7 @@ const pending = computed(() => {
                             </BarList>
                         </Card>
 
-                        <Card title="Chamados por prioridade">
+                        <Card v-if="metrics.byPriority" title="Chamados por prioridade">
                             <BarList
                                 :items="metrics.byPriority"
                                 :total="metrics.total"

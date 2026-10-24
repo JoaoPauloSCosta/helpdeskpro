@@ -148,7 +148,7 @@ test('a user registered with a department can open a ticket', function () {
 test('legacy users without a department keep working but cannot open tickets', function () {
     $legacy = User::factory()->withRole('requester')->create(['department_id' => null]);
 
-    $this->actingAs($legacy)->get(route('dashboard'))->assertOk();
+    $this->actingAs($legacy)->get(route('tickets.index'))->assertOk();
 
     $this->actingAs($legacy)->post(route('tickets.store'), ticketData())->assertSessionHasErrors('department');
 

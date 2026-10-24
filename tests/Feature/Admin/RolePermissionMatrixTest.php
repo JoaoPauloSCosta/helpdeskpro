@@ -54,7 +54,7 @@ test('guests are redirected to login', function () {
     $this->get('/admin/roles/permissions')->assertRedirect('/login');
     $this->put("/admin/roles/{$this->technician->id}/permissions", ['permissions' => []])->assertRedirect('/login');
 
-    expect(roleSlugs($this->technician))->toHaveCount(7);
+    expect(roleSlugs($this->technician))->toHaveCount(8);
 });
 
 test('users without roles.manage can neither view nor change the matrix', function (string $slug) {
@@ -114,14 +114,14 @@ test('no role is selected automatically', function () {
             ->component('Admin/Roles/Permissions')
             ->where('selected', null)
             ->has('roles', 4)
-            ->where('roles.0', ['id' => Role::where('slug', 'admin')->value('id'), 'name' => 'Administrador', 'is_system' => true, 'permissions_count' => 10]));
+            ->where('roles.0', ['id' => Role::where('slug', 'admin')->value('id'), 'name' => 'Administrador', 'is_system' => true, 'permissions_count' => 11]));
 });
 
 test('the catalog matches the real permissions, grouped by module', function () {
     $response = $this->actingAs($this->admin)->get('/admin/roles/permissions')->assertOk();
     $catalog = collect($response->viewData('page')['props']['catalog']);
 
-    expect($catalog->pluck('key')->all())->toBe(['tickets', 'comments', 'audit', 'users', 'departments', 'categories', 'roles', 'sla'])
+    expect($catalog->pluck('key')->all())->toBe(['tickets', 'comments', 'audit', 'reports', 'users', 'departments', 'categories', 'roles', 'sla'])
         ->and($catalog->flatMap(fn ($group) => collect($group['permissions'])->pluck('slug'))->sort()->values()->all())
         ->toBe(Permission::orderBy('slug')->pluck('slug')->all())
         ->and($catalog->firstWhere('key', 'tickets')['label'])->toBe('Chamados');
@@ -138,13 +138,13 @@ test('the catalog matches the real permissions, grouped by module', function () 
 });
 
 test('permissions outside the known modules are listed under other', function () {
-    Permission::create(['name' => 'Exportar relatórios', 'slug' => 'reports.export']);
+    Permission::create(['name' => 'Exportar relatórios', 'slug' => 'misc.export']);
 
     $catalog = collect($this->actingAs($this->admin)->get('/admin/roles/permissions')->viewData('page')['props']['catalog']);
 
     expect($catalog->last()['key'])->toBe('other')
         ->and($catalog->last()['label'])->toBe('Outras')
-        ->and($catalog->last()['permissions'][0]['slug'])->toBe('reports.export');
+        ->and($catalog->last()['permissions'][0]['slug'])->toBe('misc.export');
 });
 
 test('the selected role shows exactly its persisted permissions', function () {
@@ -191,7 +191,7 @@ test('permissions can be added and removed in one save', function () {
 
     expect(roleSlugs($this->technician))->toContain('tickets.close')
         ->not->toContain('tickets.resolve')
-        ->toHaveCount(7);
+        ->toHaveCount(8);
 });
 
 test('the change takes effect on the users of the role', function () {
@@ -208,10 +208,10 @@ test('the change takes effect on the users of the role', function () {
 test('an empty list removes every permission of the role', function () {
     putMatrix($this->admin, $this->technician, matrixData($this->technician, []))
         ->assertSessionHasNoErrors()
-        ->assertSessionHas('success', 'Permissões do papel Técnico salvas: 0 adicionadas e 7 removidas.');
+        ->assertSessionHas('success', 'Permissões do papel Técnico salvas: 0 adicionadas e 8 removidas.');
 
     expect(roleSlugs($this->technician))->toBe([])
-        ->and(Permission::count())->toBe(19);
+        ->and(Permission::count())->toBe(20);
 });
 
 test('unchanged associations are kept as they were', function () {
@@ -249,7 +249,7 @@ test('no duplicate associations are created', function () {
     $pairs = DB::table('role_permissions')->get(['role_id', 'permission_id'])->map(fn ($row) => "{$row->role_id}-{$row->permission_id}");
 
     expect($pairs->count())->toBe($pairs->unique()->count())
-        ->and(roleSlugs($this->technician))->toHaveCount(8);
+        ->and(roleSlugs($this->technician))->toHaveCount(9);
 });
 
 test('saving without changes records nothing', function () {
@@ -300,7 +300,7 @@ test('extra fields cannot change the role or other roles', function () {
 
     expect(roleSlugs($this->technician))->toBe(['tickets.close'])
         ->and($this->technician->fresh()->only(['name', 'is_system']))->toBe(['name' => 'Técnico', 'is_system' => true])
-        ->and(roleSlugs($admin))->toHaveCount(10);
+        ->and(roleSlugs($admin))->toHaveCount(11);
 });
 
 /* ---------- Escalada de privilégios ---------- */
@@ -316,16 +316,19 @@ test('operators cannot change their own role', function () {
     putMatrix($this->admin, $adminRole, matrixData($adminRole, [...roleSlugs($adminRole), 'tickets.close']))->assertForbidden();
     putMatrix($this->admin, $adminRole, matrixData($adminRole, []))->assertForbidden();
 
-    expect(roleSlugs($adminRole))->toHaveCount(10);
+    expect(roleSlugs($adminRole))->toHaveCount(11);
 });
 
 test('administrative permissions the operator lacks cannot be granted', function () {
     $operator = matrixOperatorWith(['roles.manage']);
 
-    putMatrix($operator, $this->technician, matrixData($this->technician, [...roleSlugs($this->technician), 'users.manage', 'sla.manage']))
+    // O Técnico tem `audit.view`, que o operador não possui: a matriz dele fica somente leitura para o operador.
+    $requester = Role::where('slug', 'requester')->first();
+
+    putMatrix($operator, $requester, matrixData($requester, ['users.manage', 'sla.manage']))
         ->assertSessionHasErrors(['permissions' => 'Você só pode conceder ou retirar permissões administrativas que também possui: Gerenciar políticas de SLA, Gerenciar usuários.']);
 
-    expect(roleSlugs($this->technician))->not->toContain('users.manage')
+    expect(roleSlugs($requester))->toBe([])
         ->and(AuditLog::count())->toBe(0);
 });
 
@@ -364,7 +367,7 @@ test('roles with administrative permissions the operator lacks are read only', f
     // Gestor tem `audit.view`, que o operador não possui: nem a parte operacional pode ser mexida.
     putMatrix($operator, $manager, matrixData($manager, ['tickets.close']))->assertForbidden();
 
-    expect(roleSlugs($manager))->toHaveCount(11);
+    expect(roleSlugs($manager))->toHaveCount(12);
 });
 
 test('the catalog marks which permissions the operator can grant', function () {

@@ -7,8 +7,8 @@ export interface NavTarget {
     route?: string;
     /** Padrões de rota (Ziggy) que marcam o destino como ativo, incluindo subpáginas. */
     active?: string | string[];
-    /** Permissão exigida para exibir o destino. A autorização real continua no backend. */
-    permission?: string;
+    /** Permissão (ou todas as permissões) exigida para exibir o destino. A autorização real continua no backend. */
+    permission?: string | string[];
 }
 
 export interface NavItem extends NavTarget {
@@ -38,11 +38,13 @@ export const adminSections: NavTarget[] = [
  * pelo Inertia); a autorização real continua no backend.
  */
 export const navigation: NavItem[] = [
-    { label: 'Visão geral', icon: 'squares', route: 'dashboard', active: 'dashboard' },
+    // Sem visão geral para o solicitante (RF-24): quem não consulta notas internas só usa os chamados.
+    { label: 'Visão geral', icon: 'squares', route: 'dashboard', active: 'dashboard', permission: 'tickets.view_internal_notes' },
     { label: 'Chamados', icon: 'inbox', route: 'tickets.index', active: 'tickets.*' },
     { label: 'Administração', icon: 'users', active: 'admin.*', sections: adminSections },
+    { label: 'Desempenho', icon: 'chart-bar', route: 'performance.index', active: 'performance.*', permission: ['reports.view_performance', 'tickets.view_all_departments'] },
     { label: 'Políticas de SLA', icon: 'clock', route: 'sla-policies.index', active: 'sla-policies.*', permission: 'sla.manage' },
-    { label: 'Auditoria', icon: 'shield-check', route: 'audit.index', active: 'audit.*', permission: 'audit.view' },
+    { label: 'Auditoria', icon: 'shield-check', route: 'audit.index', active: 'audit.*', permission: ['audit.view', 'tickets.view_all_departments'] },
     { label: 'Minha conta', icon: 'user', route: 'profile.edit', active: 'profile.*' },
 ];
 
@@ -51,7 +53,7 @@ export const isCurrent = (target: NavTarget, fallback: string): boolean =>
     ([] as string[]).concat(target.active ?? fallback).some((pattern) => route().current(pattern));
 
 export const isAvailable = (target: NavTarget, permissions: string[]): boolean =>
-    !!target.route && route().has(target.route) && (!target.permission || permissions.includes(target.permission));
+    !!target.route && route().has(target.route) && ([] as string[]).concat(target.permission ?? []).every((slug) => permissions.includes(slug));
 
 /** Página inicial da Administração para o usuário: a primeira seção disponível. */
 export const adminHomeHref = (permissions: string[]): string | null => {

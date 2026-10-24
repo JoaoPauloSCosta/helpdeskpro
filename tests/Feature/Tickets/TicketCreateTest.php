@@ -30,7 +30,6 @@ function ticketPayload(array $overrides = []): array
         'title' => 'Computador não conecta à rede',
         'description' => 'Desde hoje cedo o cabo de rede não é reconhecido.',
         'category_id' => test()->category->id,
-        'priority' => TicketPriority::High->value,
         'submission_token' => (string) Str::uuid(),
         ...$overrides,
     ];
@@ -92,10 +91,8 @@ test('the create page shows real requester data and only active categories', fun
         ->assertInertia(fn (Assert $page) => $page
             ->component('Tickets/Create')
             ->where('categories', [['value' => (string) $this->category->id, 'label' => 'Hardware']])
-            ->where('priorities', array_map(
-                fn (TicketPriority $p) => ['value' => $p->value, 'label' => $p->label()],
-                TicketPriority::cases(),
-            ))
+            // O solicitante não escolhe a prioridade (RF-05): o formulário não recebe a lista.
+            ->missing('priorities')
             ->where('requester', [
                 'name' => $this->requester->name,
                 'email' => $this->requester->email,
@@ -130,14 +127,14 @@ test('an authorized user opens a ticket with backend-defined fields', function (
     expect($ticket->title)->toBe('Computador não conecta à rede')
         ->and($ticket->description)->toBe('Desde hoje cedo o cabo de rede não é reconhecido.')
         ->and($ticket->category_id)->toBe($this->category->id)
-        ->and($ticket->priority)->toBe(TicketPriority::High)
+        ->and($ticket->priority)->toBe(TicketPriority::Medium)
         ->and($ticket->requester_id)->toBe($this->requester->id)
         ->and($ticket->department_id)->toBe($this->department->id)
         ->and($ticket->status)->toBe(TicketStatus::Open)
         ->and($ticket->assigned_to)->toBeNull()
         ->and($ticket->ticket_number)->toMatch('/^HD-['.TicketNumberGenerator::ALPHABET.']{8}$/');
 
-    // Sem política ativa para a prioridade (D2): abre sem prazo e sem política aplicada.
+    // Sem política ativa para a prioridade Média (D2): abre sem prazo e sem política aplicada.
     expect($ticket->first_response_due_at)->toBeNull()
         ->and($ticket->resolution_due_at)->toBeNull()
         ->and($ticket->sla_policy_id)->toBeNull()
@@ -145,13 +142,13 @@ test('an authorized user opens a ticket with backend-defined fields', function (
         ->and($ticket->sla_resolution_minutes)->toBeNull();
 });
 
-test('the active policy of the priority sets the copied targets and the deadlines from creation', function () {
+test('the active policy of the Medium priority sets the copied targets and the deadlines from creation', function () {
     $this->travelTo(Carbon::parse('2026-10-21 08:00:00'));
-    $policy = SlaPolicy::factory()->create(['priority' => 'high', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
+    $policy = SlaPolicy::factory()->create(['priority' => 'medium', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
     SlaPolicy::factory()->create(['priority' => 'low', 'first_response_minutes' => 5, 'resolution_minutes' => 10]);
-    SlaPolicy::factory()->inactive()->create(['priority' => 'high', 'first_response_minutes' => 1, 'resolution_minutes' => 2]);
+    SlaPolicy::factory()->inactive()->create(['priority' => 'medium', 'first_response_minutes' => 1, 'resolution_minutes' => 2]);
 
-    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload())->assertSessionHasNoErrors();
 
     $ticket = Ticket::sole();
 
@@ -168,9 +165,9 @@ test('the active policy of the priority sets the copied targets and the deadline
 
 test('the creation event records the applied policy and deadlines', function () {
     $this->travelTo(Carbon::parse('2026-10-21 08:00:00'));
-    $policy = SlaPolicy::factory()->create(['priority' => 'high', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
+    $policy = SlaPolicy::factory()->create(['priority' => 'medium', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
 
-    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload())->assertSessionHasNoErrors();
 
     $event = Ticket::sole()->histories()->where('event_type', TicketEvent::Created)->sole();
 
@@ -183,11 +180,11 @@ test('the creation event records the applied policy and deadlines', function () 
     ]);
 });
 
-test('a priority without active policy opens without deadlines and the event records it', function () {
+test('a Medium priority without active policy opens without deadlines and the event records it', function () {
     SlaPolicy::factory()->create(['priority' => 'low']);
-    SlaPolicy::factory()->inactive()->create(['priority' => 'high']);
+    SlaPolicy::factory()->inactive()->create(['priority' => 'medium']);
 
-    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload())->assertSessionHasNoErrors();
 
     $ticket = Ticket::sole();
     $event = $ticket->histories()->where('event_type', TicketEvent::Created)->sole();
@@ -200,9 +197,9 @@ test('a priority without active policy opens without deadlines and the event rec
 
 test('changing the policy later does not change tickets already opened', function () {
     $this->travelTo(Carbon::parse('2026-10-21 08:00:00'));
-    $policy = SlaPolicy::factory()->create(['priority' => 'high', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
+    $policy = SlaPolicy::factory()->create(['priority' => 'medium', 'first_response_minutes' => 30, 'resolution_minutes' => 480]);
 
-    $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => 'high']))->assertSessionHasNoErrors();
+    $this->actingAs($this->requester)->post('/tickets', ticketPayload())->assertSessionHasNoErrors();
 
     $policy->update(['first_response_minutes' => 5, 'resolution_minutes' => 10]);
 
@@ -256,6 +253,14 @@ test('manipulated fields cannot choose author, department, status or identifier'
         ->and($ticket->resolved_at)->toBeNull();
 });
 
+test('the requester cannot choose the priority: every ticket opens as Medium', function () {
+    foreach (['critical', 'high', 'low', 'nao-existe', ''] as $priority) {
+        $this->actingAs($this->requester)->post('/tickets', ticketPayload(['priority' => $priority]))->assertSessionHasNoErrors();
+    }
+
+    expect(Ticket::pluck('priority')->unique()->all())->toBe([TicketPriority::Medium]);
+});
+
 test('the historical department is kept when the requester changes department', function () {
     $this->actingAs($this->requester)->post('/tickets', ticketPayload());
 
@@ -297,8 +302,6 @@ test('invalid data is rejected without creating a ticket', function (array $over
     'descrição longa' => [['description' => str_repeat('a', Ticket::DESCRIPTION_MAX_LENGTH + 1)], 'description'],
     'sem categoria' => [['category_id' => ''], 'category_id'],
     'categoria inexistente' => [['category_id' => 999999], 'category_id'],
-    'sem prioridade' => [['priority' => ''], 'priority'],
-    'prioridade inválida' => [['priority' => 'urgentissima'], 'priority'],
     'sem token de envio' => [['submission_token' => ''], 'submission_token'],
 ]);
 

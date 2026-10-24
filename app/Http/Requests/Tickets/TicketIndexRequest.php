@@ -23,6 +23,11 @@ class TicketIndexRequest extends FormRequest
         'priority', 'status', 'assignee', 'opened_from', 'opened_to', 'sla',
     ];
 
+    /** Filtros e ordenações que a visão restrita do solicitante não tem (RF-24). */
+    public const RESTRICTED_FILTERS = ['number', 'requester', 'priority', 'sla'];
+
+    public const RESTRICTED_SORTS = ['number', 'priority'];
+
     /** Sem filtros válidos, volta à listagem padrão exibindo os erros. */
     protected $redirectRoute = 'tickets.index';
 
@@ -31,7 +36,9 @@ class TicketIndexRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $restricted = $this->user()?->hasRestrictedTicketView() ?? false;
+
+        $rules = [
             'q' => ['nullable', 'string', 'max:100'],
             'number' => ['nullable', 'string', 'max:11'],
             'title' => ['nullable', 'string', 'max:255'],
@@ -44,10 +51,19 @@ class TicketIndexRequest extends FormRequest
             'opened_from' => ['nullable', 'date_format:Y-m-d'],
             'opened_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:opened_from'],
             'sla' => ['nullable', Rule::enum(SlaState::class)],
-            'sort' => ['nullable', Rule::in(self::SORTS)],
+            'sort' => ['nullable', Rule::in($restricted ? array_diff(self::SORTS, self::RESTRICTED_SORTS) : self::SORTS)],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
+
+        // Parâmetros que a visão restrita não oferece são recusados no servidor, mesmo se forjados.
+        if ($restricted) {
+            foreach (self::RESTRICTED_FILTERS as $key) {
+                $rules[$key] = ['prohibited'];
+            }
+        }
+
+        return $rules;
     }
 
     public function attributes(): array
@@ -73,6 +89,10 @@ class TicketIndexRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'number.prohibited' => 'Este filtro não está disponível.',
+            'requester.prohibited' => 'Este filtro não está disponível.',
+            'priority.prohibited' => 'Este filtro não está disponível.',
+            'sla.prohibited' => 'Este filtro não está disponível.',
             'opened_to.after_or_equal' => 'A data final deve ser igual ou posterior à data inicial.',
         ];
     }

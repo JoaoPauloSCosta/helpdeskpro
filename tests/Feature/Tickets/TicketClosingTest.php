@@ -431,14 +431,19 @@ test('after closing, the page shows the final status, the closure and the preser
     foreach ([$this->requester, $this->tech, $this->manager] as $user) {
         $this->actingAs($user)
             ->get("/tickets/{$this->ticket->ticket_number}")
-            ->assertInertia(fn (Assert $page) => $page
-                ->where('ticket.status', 'Encerrado')
-                ->where('closure', ['closed_at' => now()->toIso8601String(), 'author' => 'Marina Souza'])
-                ->where('resolution.summary', CLOSE_SOLUTION)
-                ->where('sla.resolution.met_at', $this->resolvedAt->toIso8601String())
-                ->where('can.close', false)
-                ->where('can.reopen', false)
-                ->where('can.comment', false));
+            ->assertInertia(function (Assert $page) use ($user) {
+                $page->where('ticket.status', 'Encerrado')
+                    ->where('closure', ['closed_at' => now()->toIso8601String(), 'author' => 'Marina Souza'])
+                    ->where('resolution.summary', CLOSE_SOLUTION)
+                    ->where('can.close', false)
+                    ->where('can.reopen', false)
+                    ->where('can.comment', false);
+
+                // O solicitante não recebe SLA (RF-24).
+                $user->is($this->requester)
+                    ? $page->where('sla', null)
+                    : $page->where('sla.resolution.met_at', $this->resolvedAt->toIso8601String());
+            });
     }
 
     // Auditoria (`audit.view`, CHA-14): o gestor vê a resolução e o encerramento, em ordem.

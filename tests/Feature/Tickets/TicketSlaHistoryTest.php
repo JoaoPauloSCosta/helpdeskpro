@@ -78,9 +78,14 @@ test('guests are redirected to login', function () {
     $this->get(slaHistoryUrl($this->ticket))->assertRedirect('/login');
 });
 
+test('the requester has no access to the SLA history (restricted view)', function () {
+    $this->actingAs($this->requester)->getJson(slaHistoryUrl($this->ticket))
+        ->assertForbidden()
+        ->assertJsonMissingPath('pauses');
+});
+
 test('users with access to the ticket can consult its SLA history', function (string $who) {
     $user = match ($who) {
-        'requester' => $this->requester,
         'tech' => $this->tech,
         'manager' => $this->manager,
         'admin' => User::factory()->withRole('admin')->create(),
@@ -92,7 +97,6 @@ test('users with access to the ticket can consult its SLA history', function (st
         ->assertJsonStructure(['ticket', 'pauses' => ['count', 'closed_seconds', 'items'], 'events'])
         ->assertHeader('Cache-Control', 'no-store, private');
 })->with([
-    'solicitante original' => 'requester',
     'técnico responsável' => 'tech',
     'gestor com visibilidade global' => 'manager',
     'administrador com visibilidade global' => 'admin',
@@ -241,7 +245,7 @@ test('reopening keeps the first response deadline, the pauses and the late resol
     $ticket = $this->ticket->fresh();
     app(ReopenTicket::class)($this->requester, $ticket, $ticket->status, 'O problema voltou.');
 
-    $history = slaHistory($this->requester, $this->ticket);
+    $history = slaHistory($this->manager, $this->ticket);
 
     expect(array_column($history['events'], 'kind'))->toBe(['reopened', 'sla_breached', 'resolved', 'resumed', 'pause_started'])
         ->and($history['events'][0])->toMatchArray([
@@ -317,7 +321,7 @@ test('closing is shown and keeps the earlier SLA records', function () {
     $ticket = $this->ticket->fresh();
     app(CloseTicket::class)($this->manager, $ticket, $ticket->status);
 
-    $history = slaHistory($this->requester, $this->ticket);
+    $history = slaHistory($this->manager, $this->ticket);
 
     expect(array_column($history['events'], 'kind'))->toBe(['closed', 'resolved', 'resumed', 'pause_started'])
         ->and($history['pauses']['closed_seconds'])->toBe(600);
@@ -326,7 +330,7 @@ test('closing is shown and keeps the earlier SLA records', function () {
 /* ---------- Dados ausentes ---------- */
 
 test('a ticket without SLA records returns an empty history', function () {
-    expect(slaHistory($this->requester, $this->ticket))->toBe([
+    expect(slaHistory($this->manager, $this->ticket))->toBe([
         'ticket' => $this->ticket->ticket_number,
         'sla' => [
             'priority' => 'Alta',
@@ -383,7 +387,7 @@ test('consulting the history changes no record', function () {
     $this->travelTo(Carbon::parse('2026-10-21 18:00:00'));
 
     slaHistory($this->tech, $this->ticket);
-    slaHistory($this->requester, $this->ticket);
+    slaHistory($this->manager, $this->ticket);
 
     expect($snapshot())->toEqual($before);
 });
@@ -398,16 +402,14 @@ test('pause reason, pending details and authors are sent only to the support tea
         'expected_return_at' => '2026-10-25',
     ]);
 
+    // O solicitante nem chega ao histórico de SLA (RF-24): nada da pendência vaza.
     $this->actingAs($this->requester)->getJson(slaHistoryUrl($this->ticket))
-        ->assertOk()
+        ->assertForbidden()
         ->assertDontSee('Fornecedor analisando o defeito.')
         ->assertDontSee('Acme Peças')
         ->assertDontSee('PRT-4471')
         ->assertDontSee('Carlos Lima')
-        ->assertJsonMissingPath('pauses.items.0.reason')
-        ->assertJsonMissingPath('pauses.items.0.author')
-        ->assertJsonMissingPath('events.0.author')
-        ->assertJsonPath('pauses.items.0.type', 'Pendente Terceiros');
+        ->assertJsonMissingPath('pauses.items.0.reason');
 
     $support = slaHistory($this->tech, $this->ticket);
 

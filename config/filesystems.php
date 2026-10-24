@@ -38,6 +38,14 @@ return [
             'report' => false,
         ],
 
+        // Anexos (RF-23): fora do diretório público e sem `serve`; só saem por download autorizado.
+        'attachments' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/attachments'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

@@ -91,7 +91,7 @@ test('authorized users receive the catalog page', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('Admin/Permissions/Index')
             ->has('permissions.data', 15)
-            ->where('permissions.total', 19)
+            ->where('permissions.total', 20)
             ->where('permissions.per_page', 15)
             ->where('filters', [])
             ->where('sort', ['key' => 'name', 'direction' => 'asc'])
@@ -130,15 +130,15 @@ test('the summary covers the whole catalog, not the search or page', function ()
         ->get('/admin/permissions?module=sla')
         ->assertInertia(fn (Assert $page) => $page
             ->where('permissions.total', 1)
-            ->where('summary', ['total' => 19, 'modules' => 8, 'administrative' => 6]));
+            ->where('summary', ['total' => 20, 'modules' => 9, 'administrative' => 7]));
 });
 
 test('the module filter offers only modules present in the catalog', function () {
     $modules = fn () => collect(catalogProps($this->actingAs($this->admin)->get('/admin/permissions'))['options']['modules'])->pluck('value')->all();
 
-    expect($modules())->toBe(['tickets', 'comments', 'audit', 'users', 'departments', 'categories', 'roles', 'sla']);
+    expect($modules())->toBe(['tickets', 'comments', 'audit', 'reports', 'users', 'departments', 'categories', 'roles', 'sla']);
 
-    Permission::create(['name' => 'Exportar relatórios', 'slug' => 'reports.export']);
+    Permission::create(['name' => 'Exportar relatórios', 'slug' => 'misc.export']);
 
     expect($modules())->toContain('other');
 });
@@ -147,7 +147,7 @@ test('an empty catalog is distinguishable from a search without results', functi
     $this->actingAs($this->admin)
         ->get('/admin/permissions?q=inexistente')
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->where('permissions.total', 0)->where('summary.total', 19)->where('filters', ['q' => 'inexistente']));
+        ->assertInertia(fn (Assert $page) => $page->where('permissions.total', 0)->where('summary.total', 20)->where('filters', ['q' => 'inexistente']));
 
     // Catálogo realmente vazio, com um operador cujo acesso não depende do papel.
     $operator = User::factory()->create();
@@ -219,11 +219,11 @@ test('the module filter is applied on the server and combines with the search', 
 });
 
 test('permissions with an unknown prefix are listed under other', function () {
-    Permission::create(['name' => 'Exportar relatórios', 'slug' => 'reports.export']);
+    Permission::create(['name' => 'Exportar relatórios', 'slug' => 'misc.export']);
 
     $rows = collect(catalogProps($this->actingAs($this->admin)->get('/admin/permissions?module=other'))['permissions']['data']);
 
-    expect($rows->pluck('slug')->all())->toBe(['reports.export'])
+    expect($rows->pluck('slug')->all())->toBe(['misc.export'])
         ->and($rows->first()['group_label'])->toBe('Outras');
 });
 
@@ -274,7 +274,7 @@ test('pagination happens on the server and keeps filters and sorting', function 
     $second = catalogProps($this->actingAs($this->admin)->get('/admin/permissions?sort=slug&page=2'))['permissions'];
 
     expect($second['current_page'])->toBe(2)
-        ->and($second['data'])->toHaveCount(4)
+        ->and($second['data'])->toHaveCount(5)
         ->and($second['prev_page_url'])->toContain('sort=slug');
 });
 
@@ -299,6 +299,7 @@ test('details return the selected permission and the roles that hold it', functi
                 'roles' => [
                     ['id' => Role::where('slug', 'admin')->value('id'), 'name' => 'Administrador', 'is_system' => true],
                     ['id' => Role::where('slug', 'manager')->value('id'), 'name' => 'Gestor', 'is_system' => true],
+                    ['id' => Role::where('slug', 'technician')->value('id'), 'name' => 'Técnico', 'is_system' => true],
                 ],
             ]));
 });

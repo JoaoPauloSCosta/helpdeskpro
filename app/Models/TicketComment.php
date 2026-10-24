@@ -39,6 +39,12 @@ class TicketComment extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    /** Anexos da mensagem (RF-23); herdam a visibilidade dela. */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TicketAttachment::class);
+    }
+
     /** Conteúdos substituídos por edições (CHA-12), na ordem em que foram gravados. */
     public function versions(): HasMany
     {

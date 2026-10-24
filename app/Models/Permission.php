@@ -19,6 +19,7 @@ class Permission extends Model
         'roles.manage',
         'sla.manage',
         'audit.view',
+        'reports.view_performance',
     ];
 
     /**
@@ -29,6 +30,7 @@ class Permission extends Model
         'tickets' => 'Chamados',
         'comments' => 'Comentários',
         'audit' => 'Auditoria',
+        'reports' => 'Relatórios',
         'users' => 'Usuários',
         'departments' => 'Departamentos',
         'categories' => 'Categorias',

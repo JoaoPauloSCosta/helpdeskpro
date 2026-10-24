@@ -427,7 +427,7 @@ test('the detail page does not present a previous resolution as met after reopen
 
     postReopening($this->requester, $this->ticket)->assertSessionHasNoErrors();
 
-    $this->actingAs($this->requester)
+    $this->actingAs(User::factory()->withRole('manager')->create())
         ->get("/tickets/{$this->ticket->ticket_number}")
         ->assertInertia(fn (Assert $page) => $page
             ->where('ticket.status', 'Aberto')

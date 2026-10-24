@@ -68,7 +68,7 @@ test('guests are redirected to login', function () {
 });
 
 test('active users receive the dashboard inside the authenticated layout', function () {
-    $user = User::factory()->withRole('requester')->create();
+    $user = User::factory()->withRole('manager')->create();
 
     $this->actingAs($user)
         ->get('/dashboard')
@@ -79,7 +79,7 @@ test('active users receive the dashboard inside the authenticated layout', funct
             ->where('metrics', null)
             ->where('hasAnyTicket', false)
             ->where('can.create', true)
-            ->where('scope', ['allDepartments' => false, 'includesAvailable' => false])
+            ->where('scope', ['allDepartments' => true, 'includesAvailable' => false])
             ->has('generatedAt'));
 });
 
@@ -189,38 +189,12 @@ test('pending time sums closed pauses and only counts the active ones', function
 
 /* ---------- Escopo de acesso ---------- */
 
-test('tickets outside the requester scope never reach any indicator', function () {
-    $department = Department::factory()->create(['name' => 'Compras']);
-    $hiddenDepartment = Department::factory()->create(['name' => 'Diretoria']);
-    $user = User::factory()->withRole('requester')->create(['department_id' => $department->id]);
-    $colleague = User::factory()->withRole('requester')->create(['department_id' => $department->id]);
-    $hiddenTech = User::factory()->withRole('technician')->create(['name' => 'Técnico Oculto']);
+test('the requester has no overview: the dashboard sends them to their tickets', function () {
+    $user = User::factory()->withRole('requester')->create();
+    Ticket::factory()->create(['requester_id' => $user->id]);
 
-    Ticket::factory()->create(['requester_id' => $user->id, 'department_id' => $department->id, 'priority' => TicketPriority::Low]);
-
-    // Fora do escopo: do colega do mesmo departamento e de outro departamento.
-    $hidden = collect([
-        Ticket::factory()->create(['requester_id' => $colleague->id, 'department_id' => $department->id, 'priority' => TicketPriority::Critical]),
-        Ticket::factory()->create([
-            'department_id' => $hiddenDepartment->id,
-            'assigned_to' => $hiddenTech->id,
-            'status' => TicketStatus::InProgress,
-            'resolution_due_at' => now()->subHour(),
-        ]),
-    ]);
-    $hidden->each(fn (Ticket $ticket) => reopenEvent($ticket));
-    $hidden->each(fn (Ticket $ticket) => slaPauseRecord($ticket, 7200));
-
-    $metrics = dashboardMetrics($user);
-
-    expect($metrics['total'])->toBe(1)
-        ->and(collect($metrics['byStatus'])->sum('total'))->toBe(1)
-        ->and(totalsByValue($metrics['byPriority']))->toBe(['low' => 1, 'medium' => 0, 'high' => 0, 'critical' => 0])
-        ->and($metrics['byDepartment']['items'])->toBe([['value' => (string) $department->id, 'label' => 'Compras', 'total' => 1]])
-        ->and($metrics['byAssignee']['items'])->toBe([['value' => 'none', 'label' => 'Sem responsável', 'total' => 1]])
-        ->and($metrics['sla'])->toBe(['overdue' => 0, 'tracked' => 0])
-        ->and($metrics['reopened'])->toBe(0)
-        ->and($metrics['pending'])->toBe(['closed' => 0, 'closed_seconds' => 0, 'active' => 0]);
+    $this->actingAs($user)->get('/dashboard')->assertRedirect('/tickets');
+    $this->actingAs($user)->get('/dashboard?opened_from=2026-10-10')->assertRedirect('/tickets');
 });
 
 test('technicians count assigned tickets and the self-assignment pool, as in the listing', function () {
@@ -290,8 +264,12 @@ test('a period without tickets is distinguished from a scope without tickets', f
 });
 
 test('the period cannot reveal tickets outside the scope', function () {
-    $user = User::factory()->withRole('requester')->create();
-    Ticket::factory()->create(['created_at' => '2026-10-10 10:00:00']);
+    $user = User::factory()->withRole('technician')->create();
+    Ticket::factory()->create([
+        'created_at' => '2026-10-10 10:00:00',
+        'assigned_to' => User::factory()->withRole('technician')->create()->id,
+        'status' => TicketStatus::InProgress,
+    ]);
 
     $this->actingAs($user)
         ->get('/dashboard?opened_from=2026-10-10&opened_to=2026-10-10')

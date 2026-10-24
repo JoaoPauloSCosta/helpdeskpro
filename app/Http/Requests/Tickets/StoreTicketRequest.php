@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Tickets;
 
-use App\Enums\TicketPriority;
+use App\Http\Requests\Concerns\Attachments;
 use App\Models\Ticket;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,12 +10,12 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
- * Abertura de chamado (RF-05). Só aceita o que o solicitante informa; qualquer outro campo
+ * Abertura de chamado (RF-05). Só aceita o que o solicitante informa (a prioridade não está entre os campos: todo chamado abre como Média, RF-05); qualquer outro campo
  * enviado (autor, departamento, status, identificador, prazos) é ignorado.
  */
 class StoreTicketRequest extends FormRequest
 {
-    public const FIELDS = ['title', 'description', 'category_id', 'priority'];
+    public const FIELDS = ['title', 'description', 'category_id'];
 
     public function authorize(): bool
     {
@@ -35,8 +35,8 @@ class StoreTicketRequest extends FormRequest
                 'integer',
                 Rule::exists('ticket_categories', 'id')->where('is_active', true),
             ],
-            'priority' => ['required', Rule::enum(TicketPriority::class)],
             'submission_token' => ['required', 'uuid'],
+            ...Attachments::rules(),
         ];
     }
 
@@ -68,9 +68,8 @@ class StoreTicketRequest extends FormRequest
             'category_id.required' => 'Selecione uma categoria.',
             'category_id.integer' => 'Selecione uma categoria válida.',
             'category_id.exists' => 'A categoria selecionada não está disponível. Escolha outra.',
-            'priority.required' => 'Selecione a prioridade.',
-            'priority.enum' => 'Selecione uma prioridade válida.',
             'submission_token.*' => 'Não foi possível validar o envio. Recarregue a página e tente novamente.',
+            ...Attachments::messages(),
             'title.string' => 'Informe um título válido.',
             'description.string' => 'Informe uma descrição válida.',
         ];

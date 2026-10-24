@@ -42,7 +42,7 @@ class TicketSlaHistoryController extends Controller
      */
     public function index(Request $request, Ticket $ticket): JsonResponse
     {
-        Gate::authorize('view', $ticket);
+        Gate::authorize('viewSla', $ticket);
 
         $support = $request->user()->can('viewPendingDetails', $ticket);
         $now = now();

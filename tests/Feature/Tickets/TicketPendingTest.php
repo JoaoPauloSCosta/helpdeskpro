@@ -576,8 +576,8 @@ test('the active pending is shown to the support team only', function () {
             ->where('activePending.supplier_name', 'Fornecedor XPTO')
             ->where('activePending.expected_return_at', now()->addDay()->toDateString())
             ->where('activePending.author', 'Carlos Lima')
-            // Sem `audit.view`, o técnico não consulta o histórico de auditoria.
-            ->where('can.viewAudit', false));
+            // O técnico responsável consulta a auditoria do chamado (`audit.view`, RF-19 v1.8).
+            ->where('can.viewAudit', true));
 
     $this->actingAs($this->requester)
         ->get("/tickets/{$this->ticket->ticket_number}")

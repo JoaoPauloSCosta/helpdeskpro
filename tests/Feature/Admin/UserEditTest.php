@@ -297,17 +297,21 @@ test('changing the e-mail follows the profile policy and keeps authentication wo
 
 test('operators cannot grant roles with administrative permissions they lack', function () {
     $operator = limitedUserManager();
+    // O Técnico tem `audit.view` (RF-19, v1.8): o operador limitado não edita nem concede esse papel.
+    $target = User::factory()->withRole('requester')->create(['department_id' => $this->support->id]);
 
-    patchUser($operator, $this->target, editData($this->target, ['role_id' => slugRoleId('admin')]))
+    patchUser($operator, $target, editData($target, ['role_id' => slugRoleId('admin')]))
         ->assertSessionHasErrors(['role_id' => 'Você não tem permissão para atribuir este papel.']);
-    patchUser($operator, $this->target, editData($this->target, ['role_id' => slugRoleId('manager')]))
+    patchUser($operator, $target, editData($target, ['role_id' => slugRoleId('manager')]))
+        ->assertSessionHasErrors('role_id');
+    patchUser($operator, $target, editData($target, ['role_id' => slugRoleId('technician')]))
         ->assertSessionHasErrors('role_id');
 
-    expect($this->target->fresh()->role_id)->toBe(slugRoleId('technician'));
+    expect($target->fresh()->role_id)->toBe(slugRoleId('requester'));
 
-    patchUser($operator, $this->target, editData($this->target, ['role_id' => slugRoleId('requester')]))
-        ->assertSessionHasNoErrors();
-    expect($this->target->fresh()->role_id)->toBe(slugRoleId('requester'));
+    $role = Role::create(['name' => 'Operacional', 'slug' => 'ops']);
+    patchUser($operator, $target, editData($target, ['role_id' => $role->id]))->assertSessionHasNoErrors();
+    expect($target->fresh()->role_id)->toBe($role->id);
 });
 
 test('operators cannot edit users more privileged than themselves', function () {
@@ -330,12 +334,14 @@ test('operators cannot edit users more privileged than themselves', function () 
 });
 
 test('the form only offers roles the operator can grant', function () {
+    $target = User::factory()->withRole('requester')->create(['department_id' => $this->support->id]);
+
     $this->actingAs(limitedUserManager())
-        ->get("/admin/users/{$this->target->id}/edit")
+        ->get("/admin/users/{$target->id}/edit")
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->where(
             'options.roles',
-            fn ($roles) => collect($roles)->pluck('label')->sort()->values()->all() === ['Recursos Humanos', 'Solicitante', 'Técnico'],
+            fn ($roles) => collect($roles)->pluck('label')->sort()->values()->all() === ['Recursos Humanos', 'Solicitante'],
         ));
 });
 

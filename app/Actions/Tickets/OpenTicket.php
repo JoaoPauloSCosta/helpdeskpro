@@ -3,6 +3,7 @@
 namespace App\Actions\Tickets;
 
 use App\Enums\TicketEvent;
+use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Models\Department;
 use App\Models\Ticket;
@@ -28,14 +29,15 @@ class OpenTicket
     /** Tentativas em caso de colisão do identificador (RF-06, regra 8). */
     public const MAX_ATTEMPTS = 5;
 
-    public function __construct(private TicketNumberGenerator $numbers) {}
+    public function __construct(private TicketNumberGenerator $numbers, private StoreTicketAttachments $attachments) {}
 
     /**
-     * @param  array{title: string, description: string, category_id: int, priority: string}  $data
+     * @param  array{title: string, description: string, category_id: int}  $data
+     * @param  list<\Illuminate\Http\UploadedFile>  $files  Anexos da abertura (RF-23), públicos; gravados na mesma transação.
      *
      * @throws TicketNumberUnavailable
      */
-    public function __invoke(User $requester, array $data): Ticket
+    public function __invoke(User $requester, array $data, array $files = []): Ticket
     {
         for ($attempt = 1; $attempt <= self::MAX_ATTEMPTS; $attempt++) {
             $ticket = (new Ticket)->fill($data)->forceFill([
@@ -43,18 +45,29 @@ class OpenTicket
                 'requester_id' => $requester->id,
                 'department_id' => $requester->department_id,
                 'status' => TicketStatus::Open,
+                // O solicitante não escolhe a prioridade (RF-05); a equipe a ajusta depois (RF-16, RF-18).
+                'priority' => TicketPriority::Medium,
             ]);
 
+            // Arquivos não participam da transação: o que já foi gravado é removido se ela falhar.
+            $written = [];
+
             try {
-                DB::transaction(function () use ($ticket, $requester) {
+                DB::transaction(function () use ($ticket, $requester, $files, &$written) {
                     $this->applySla($ticket);
                     $ticket->save();
                     $this->recordCreation($ticket, $requester);
+                    ($this->attachments)($requester, $ticket, null, $files, $written);
                 });
 
                 return $ticket;
             } catch (UniqueConstraintViolationException) {
                 // O único índice exclusivo além da chave primária é `ticket_number`: gera outro.
+                StoreTicketAttachments::purge($written);
+            } catch (\Throwable $e) {
+                StoreTicketAttachments::purge($written);
+
+                throw $e;
             }
         }
 

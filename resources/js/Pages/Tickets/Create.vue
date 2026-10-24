@@ -13,14 +13,16 @@ import Textarea from '@/Components/Textarea.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { useLeaveGuard } from '@/composables/useLeaveGuard';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import AttachmentPicker from '@/Components/AttachmentPicker.vue';
+import type { AttachmentLimits } from '@/lib/attachments';
 import type { Option, TicketRequester } from '@/lib/ticket';
 import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
     categories: Option[];
-    priorities: Option[];
     requester: TicketRequester;
     limits: { title: number; description: number };
+    attachmentLimits: AttachmentLimits;
     submissionToken: string;
 }>();
 
@@ -32,11 +34,18 @@ const form = useForm({
     title: '',
     description: '',
     category_id: '',
-    priority: '',
+    attachments: [] as File[],
     submission_token: props.submissionToken,
 });
 
-type Field = 'title' | 'description' | 'category_id' | 'priority';
+type Field = 'title' | 'description' | 'category_id';
+
+/** Erros do servidor para os anexos: do campo e de cada arquivo (`attachments.0`, ...). */
+const attachmentErrors = computed(() =>
+    Object.entries(form.errors as Record<string, string>)
+        .filter(([key]) => key === 'attachments' || key.startsWith('attachments.'))
+        .map(([, message]) => message),
+);
 
 const hasCategories = computed(() => props.categories.length > 0);
 const canSubmit = computed(() => hasCategories.value && props.requester.departmentActive);
@@ -62,7 +71,6 @@ const validate = (): boolean => {
         errors.description = `A descrição pode ter no máximo ${props.limits.description.toLocaleString('pt-BR')} caracteres.`;
 
     if (!form.category_id) errors.category_id = 'Selecione uma categoria.';
-    if (!form.priority) errors.priority = 'Selecione a prioridade.';
 
     form.clearErrors();
     form.setError(errors);
@@ -168,26 +176,6 @@ const tips = [
                                     </Select>
                                 </FormField>
 
-                                <FormField
-                                    label="Prioridade"
-                                    required
-                                    help="A equipe de suporte pode ajustá-la durante o atendimento."
-                                    :error="form.errors.priority"
-                                    v-slot="{ id, describedby, invalid }"
-                                >
-                                    <Select
-                                        :id="id"
-                                        v-model="form.priority"
-                                        placeholder="Selecione a prioridade"
-                                        required
-                                        :aria-describedby="describedby"
-                                        :invalid="invalid"
-                                        @change="clearError('priority')"
-                                    >
-                                        <option v-for="o in priorities" :key="o.value" :value="o.value">{{ o.label }}</option>
-                                    </Select>
-                                </FormField>
-
                                 <div class="sm:col-span-2">
                                     <FormField label="Título" required :error="form.errors.title" v-slot="{ id, describedby, invalid }">
                                         <TextInput
@@ -230,18 +218,14 @@ const tips = [
                                     </FormField>
                                 </div>
 
-                                <!-- Anexos: sem suporte no backend ainda; nenhuma seleção de arquivo é simulada. -->
+                                <!-- Anexos da abertura (RF-23): públicos, conferidos no servidor. -->
                                 <div class="sm:col-span-2">
-                                    <p class="text-sm font-medium text-neutral-700">Anexos</p>
-                                    <div
-                                        class="mt-1 flex items-center gap-3 rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm text-neutral-600"
-                                    >
-                                        <Icon name="info" class="shrink-0 text-neutral-400" />
-                                        <p>
-                                            O envio de anexos ainda não está disponível. Descreva na solicitação as
-                                            evidências que você possui; a equipe de suporte poderá pedi-las durante o atendimento.
-                                        </p>
-                                    </div>
+                                    <AttachmentPicker
+                                        v-model="form.attachments"
+                                        :limits="attachmentLimits"
+                                        :errors="attachmentErrors"
+                                        :disabled="form.processing"
+                                    />
                                 </div>
                             </div>
                         </div>

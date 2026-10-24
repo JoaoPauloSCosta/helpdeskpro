@@ -25,6 +25,11 @@ class TicketCsvExport
         'Responsável', 'Situação do SLA', 'Abertura (UTC)', 'Última atualização (UTC)', 'Resolução (UTC)',
     ];
 
+    public const RESTRICTED_HEADERS = [
+        'Título', 'Departamento', 'Categoria', 'Status', 'Responsável',
+        'Abertura (UTC)', 'Última atualização (UTC)', 'Resolução (UTC)',
+    ];
+
     /** Linhas lidas por vez; o arquivo inteiro nunca fica na memória. */
     private const CHUNK = 500;
 
@@ -37,15 +42,16 @@ class TicketCsvExport
      * truncado entregue como se estivesse completo.
      *
      * @param  Builder<Ticket>  $tickets  Consulta já com escopo de acesso, filtros e ordenação.
+     * @param  bool  $restricted  Visão restrita do solicitante (RF-24): sem identificador, solicitante, prioridade e SLA.
      * @return resource
      */
-    public function write(Builder $tickets, CarbonInterface $now)
+    public function write(Builder $tickets, CarbonInterface $now, bool $restricted = false)
     {
         $stream = fopen('php://temp/maxmemory:'.self::MEMORY_LIMIT, 'w+');
 
         try {
             fwrite($stream, "\xEF\xBB\xBF");
-            $this->put($stream, self::HEADERS);
+            $this->put($stream, $restricted ? self::RESTRICTED_HEADERS : self::HEADERS);
 
             $tickets
                 ->select([
@@ -57,20 +63,31 @@ class TicketCsvExport
                 // Uma linha por chamado: só relações "belongsTo", carregadas em bloco, sem junções.
                 ->with(['requester:id,name', 'assignee:id,name', 'department:id,name', 'category:id,name'])
                 ->lazy(self::CHUNK)
-                ->each(fn (Ticket $ticket) => $this->put($stream, [
-                    $ticket->ticket_number,
-                    $ticket->title,
-                    $ticket->requester?->name,
-                    $ticket->department?->name,
-                    $ticket->category?->name,
-                    $ticket->priority->label(),
-                    $ticket->status->label(),
-                    $ticket->assignee?->name,
-                    $ticket->slaState($now)->label(),
-                    $this->date($ticket->created_at),
-                    $this->date($ticket->updated_at),
-                    $this->date($ticket->resolved_at),
-                ]));
+                ->each(fn (Ticket $ticket) => $this->put($stream, $restricted
+                    ? [
+                        $ticket->title,
+                        $ticket->department?->name,
+                        $ticket->category?->name,
+                        $ticket->status->label(),
+                        $ticket->assignee?->name,
+                        $this->date($ticket->created_at),
+                        $this->date($ticket->updated_at),
+                        $this->date($ticket->resolved_at),
+                    ]
+                    : [
+                        $ticket->ticket_number,
+                        $ticket->title,
+                        $ticket->requester?->name,
+                        $ticket->department?->name,
+                        $ticket->category?->name,
+                        $ticket->priority->label(),
+                        $ticket->status->label(),
+                        $ticket->assignee?->name,
+                        $ticket->slaState($now)->label(),
+                        $this->date($ticket->created_at),
+                        $this->date($ticket->updated_at),
+                        $this->date($ticket->resolved_at),
+                    ]));
 
             rewind($stream);
 

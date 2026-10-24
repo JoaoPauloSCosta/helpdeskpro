@@ -35,10 +35,10 @@ function auditProps(TestResponse $response): array
 }
 
 /** Papel personalizado só com a permissão informada. */
-function auditOperatorWithOnly(string $permission): User
+function auditOperatorWithOnly(string ...$permissions): User
 {
-    $role = Role::create(['name' => "Somente {$permission}", 'slug' => str_replace('.', '-', $permission)]);
-    $role->permissions()->attach(Permission::where('slug', $permission)->value('id'), ['created_at' => now()]);
+    $role = Role::create(['name' => 'Somente '.implode(', ', $permissions), 'slug' => str_replace('.', '-', implode('-', $permissions))]);
+    $role->permissions()->attach(Permission::whereIn('slug', $permissions)->pluck('id'), ['created_at' => now()]);
 
     return User::factory()->create(['role_id' => $role->id]);
 }
@@ -60,7 +60,23 @@ test('users without audit.view get a neutral access denied page without audit da
             ->where('status', 403)
             ->missing('logs')
             ->missing('detail'));
-})->with(['requester', 'technician']);
+})->with(['requester']);
+
+test('the technician reads ticket audits but not the global audit trail', function () {
+    $technician = User::factory()->withRole('technician')->create();
+    $log = auditEvent($this->admin, $this->admin, AdminEvent::UserUpdated, ['name' => 'A'], ['name' => 'B']);
+
+    expect($technician->hasPermission('audit.view'))->toBeTrue();
+
+    $this->actingAs($technician)->get('/audit')->assertForbidden()
+        ->assertInertia(fn (Assert $page) => $page->component('Error')->missing('logs'));
+    $this->actingAs($technician)->get("/audit?selected={$log->id}")->assertForbidden()
+        ->assertInertia(fn (Assert $page) => $page->missing('detail'));
+});
+
+test('audit.view alone does not open the global audit trail', function () {
+    $this->actingAs(auditOperatorWithOnly('audit.view'))->get('/audit')->assertForbidden();
+});
 
 test('the detail parameter does not bypass authorization', function () {
     $log = auditEvent($this->admin, $this->admin, AdminEvent::UserUpdated, ['name' => 'A'], ['name' => 'B']);
@@ -76,7 +92,7 @@ test('other permissions do not grant access to the audit trail', function (strin
 })->with(['users.manage', 'roles.manage', 'sla.manage', 'tickets.view_all_departments']);
 
 test('access follows the permission, not the role name', function () {
-    $this->actingAs(auditOperatorWithOnly('audit.view'))->get('/audit')->assertOk();
+    $this->actingAs(auditOperatorWithOnly('audit.view', 'tickets.view_all_departments'))->get('/audit')->assertOk();
 
     Role::where('slug', 'admin')->first()->permissions()->detach();
     $this->actingAs($this->admin->fresh())->get('/audit')->assertForbidden();

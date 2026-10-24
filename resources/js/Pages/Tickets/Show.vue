@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import Button from '@/Components/Button.vue';
 import Card from '@/Components/Card.vue';
+import AttachmentList from '@/Components/AttachmentList.vue';
+import AttachmentPicker from '@/Components/AttachmentPicker.vue';
 import CommentCard from '@/Components/CommentCard.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import FormField from '@/Components/FormField.vue';
@@ -45,11 +47,16 @@ import {
     type TicketSlaIndicator,
 } from '@/lib/ticket';
 import { formatTarget } from '@/lib/sla';
+import type { AttachmentLimits, TicketAttachment } from '@/lib/attachments';
 
 const props = defineProps<{
     ticket: TicketDetail;
-    sla: { firstResponse: TicketSlaIndicator; resolution: TicketSlaIndicator };
-    comments: TicketCommentItem[];
+    /** `null` na visão restrita do solicitante (RF-24). */
+    sla: { firstResponse: TicketSlaIndicator; resolution: TicketSlaIndicator } | null;
+    comments: (TicketCommentItem & { attachments: TicketAttachment[] })[];
+    /** Anexos da abertura (públicos). */
+    attachments: TicketAttachment[];
+    attachmentLimits: AttachmentLimits;
     can: {
         comment: boolean;
         addInternalNote: boolean;
@@ -168,16 +175,21 @@ const pendingDetails = computed(() => {
 
 /* ---------- SLA ---------- */
 
-const slaCards = computed(() => [
-    { key: 'first', title: 'Primeira resposta', metLabel: 'Respondido em', data: props.sla.firstResponse },
-    { key: 'resolution', title: 'Resolução', metLabel: 'Resolvido em', data: props.sla.resolution },
-]);
+const slaCards = computed(() =>
+    props.sla
+        ? [
+              { key: 'first', title: 'Primeira resposta', metLabel: 'Respondido em', data: props.sla.firstResponse },
+              { key: 'resolution', title: 'Resolução', metLabel: 'Resolvido em', data: props.sla.resolution },
+          ]
+        : [],
+);
 
 /* ---------- Dados do chamado ---------- */
 
 /** [rótulo, valor, texto neutro quando o valor não existe] */
 const details = computed(() => [
-    ['Solicitante', props.ticket.requester, '—'],
+    // O solicitante não vê o campo Solicitante (RF-24): o backend nem o envia.
+    ...(props.ticket.requester !== undefined ? [['Solicitante', props.ticket.requester, '—']] : []),
     ['Departamento', props.ticket.department, '—'],
     ['Categoria', props.ticket.category, '—'],
     ['Responsável', props.ticket.assignee, 'Não atribuído'],
@@ -191,7 +203,15 @@ const form = useForm({
     body: '',
     // O backend valida a visibilidade pedida; sem permissão, a opção nem aparece.
     visibility: 'public' as string | number | null,
+    attachments: [] as File[],
 });
+
+/** Erros do servidor para os anexos: do campo e de cada arquivo (`attachments.0`, ...). */
+const attachmentErrors = computed(() =>
+    Object.entries(form.errors as Record<string, string>)
+        .filter(([key]) => key === 'attachments' || key.startsWith('attachments.'))
+        .map(([, message]) => message),
+);
 
 const isInternal = computed(() => form.visibility === 'internal');
 const focusBody = () => document.querySelector<HTMLElement>('#comment-form textarea')?.focus();
@@ -213,7 +233,7 @@ const submit = () => {
         preserveScroll: true,
         onSuccess: () => {
             toast.success(isInternal.value ? 'Nota interna registrada.' : 'Comentário registrado.');
-            form.reset('body');
+            form.reset('body', 'attachments');
         },
         onError: () => focusBody(),
         onFinish: () => (submitting = false),
@@ -261,19 +281,22 @@ const commentCount = computed(() =>
                 <div class="flex flex-wrap items-center gap-2">
                     <TicketNumber :number="ticket.number" copyable />
                     <StatusBadge :status="ticket.status" />
-                    <PriorityBadge :priority="ticket.priority" />
+                    <PriorityBadge v-if="ticket.priority" :priority="ticket.priority" />
                 </div>
 
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="space-y-4">
                     <div class="min-w-0">
                         <h1 class="break-words text-2xl font-semibold text-neutral-900">{{ ticket.title }}</h1>
                         <p class="mt-1 text-sm text-neutral-600">
-                            Aberto por <span class="font-medium text-neutral-900">{{ ticket.requester ?? '—' }}</span>
-                            em {{ formatDateTime(ticket.created_at) }}
+                            <template v-if="ticket.requester !== undefined">
+                                Aberto por <span class="font-medium text-neutral-900">{{ ticket.requester ?? '—' }}</span>
+                                em {{ formatDateTime(ticket.created_at) }}
+                            </template>
+                            <template v-else>Aberto em {{ formatDateTime(ticket.created_at) }}</template>
                         </p>
                     </div>
-                    <!-- Somente ações implementadas e autorizadas; as do ciclo de vida virão com seus fluxos -->
-                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign || can.changeStatus || can.registerPending || can.resolve || can.reopen || can.close" class="flex shrink-0 flex-wrap gap-2">
+                    <!-- Ações autorizadas, logo abaixo do título e acima do cartão do chamado -->
+                    <div v-if="can.update || can.assign || can.reassign || can.selfAssign || can.changeStatus || can.registerPending || can.resolve || can.reopen || can.close" class="flex flex-wrap gap-2">
                         <Button v-if="can.selfAssign" @click="selfAssignNumber = ticket.number">
                             <Icon name="check" :size="16" /> Assumir chamado
                         </Button>
@@ -303,7 +326,7 @@ const commentCount = computed(() =>
             </div>
 
             <!-- SLA: somente o que o backend registrou; nada é estimado no navegador -->
-            <section aria-labelledby="sla-title" class="space-y-4">
+            <section v-if="sla" aria-labelledby="sla-title" class="space-y-4">
                 <h2 id="sla-title" class="sr-only">Indicadores de SLA</h2>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div
@@ -355,6 +378,7 @@ const commentCount = computed(() =>
                     <Card title="Descrição do chamado">
                         <!-- Interpolação de texto: o conteúdo do usuário nunca é tratado como HTML -->
                         <p class="whitespace-pre-line break-words text-sm text-neutral-900">{{ ticket.description }}</p>
+                        <AttachmentList :ticket="ticket.number" :attachments="attachments" />
 
                         <dl class="mt-6 grid gap-4 border-t border-neutral-200 pt-6 text-sm sm:grid-cols-2">
                             <div v-for="[label, value, fallback] in details" :key="label!" class="min-w-0">
@@ -363,7 +387,7 @@ const commentCount = computed(() =>
                                     {{ value || fallback }}
                                 </dd>
                             </div>
-                            <div>
+                            <div v-if="ticket.priority">
                                 <dt class="text-xs font-medium text-neutral-500">Prioridade</dt>
                                 <dd class="mt-1"><PriorityBadge :priority="ticket.priority" /></dd>
                             </div>
@@ -422,7 +446,11 @@ const commentCount = computed(() =>
                                     :edited="comment.edited"
                                     can-view-history
                                     @show-history="openHistory(comment)"
-                                />
+                                >
+                                    <template #attachments>
+                                        <AttachmentList :ticket="ticket.number" :attachments="comment.attachments" />
+                                    </template>
+                                </CommentCard>
                             </li>
                         </ol>
                         <EmptyState
@@ -473,6 +501,13 @@ const commentCount = computed(() =>
                                     />
                                 </FormField>
 
+                                <AttachmentPicker
+                                    v-model="form.attachments"
+                                    :limits="attachmentLimits"
+                                    :errors="attachmentErrors"
+                                    :disabled="form.processing"
+                                />
+
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <p
                                         v-if="isInternal"
@@ -513,7 +548,8 @@ const commentCount = computed(() =>
                     </Card>
 
                     <!-- Histórico de auditoria (CHA-14): somente eventos gravados, carregado sob demanda -->
-                    <AuditHistory :ticket="ticket" :allowed="can.viewAudit" />
+                    <!-- Sem `audit.view` o cartão não existe na tela: nem placeholder, nem consulta (RN-20) -->
+                    <AuditHistory v-if="can.viewAudit" :ticket="ticket" :allowed="can.viewAudit" />
                 </div>
             </div>
         </div>

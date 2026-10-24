@@ -91,6 +91,17 @@ class User extends Authenticatable
     }
 
     /**
+     * Visão restrita dos chamados (RF-24): quem não faz parte da equipe de suporte, identificada por
+     * `tickets.view_internal_notes` (a mesma marca usada na primeira resposta e nos dados da pendência),
+     * não recebe identificador na listagem, prioridade, SLA, solicitante nem auditoria. Decidida no
+     * servidor; a interface só reflete.
+     */
+    public function hasRestrictedTicketView(): bool
+    {
+        return ! $this->hasPermission('tickets.view_internal_notes');
+    }
+
+    /**
      * Verifica uma permissão do papel (RF-03). Sem papel, não há permissões.
      * O nome do papel nunca é usado como atalho de autorização.
      */

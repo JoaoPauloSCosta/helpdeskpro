@@ -62,18 +62,20 @@ export interface Option {
 
 /** Linha da listagem (CHA-01). Nunca traz a chave primária interna. */
 export interface TicketListItem {
+    /** Na visão restrita do solicitante só monta o link: a listagem não o exibe (RF-24). */
     number: string;
     title: string;
-    requester: string | null;
+    /** Ausentes na visão restrita do solicitante (RF-24): solicitante, prioridade e SLA. */
+    requester?: string | null;
     department: string | null;
     category: string | null;
-    priority: TicketPriority;
+    priority?: TicketPriority;
     status: TicketStatus;
     assignee: string | null;
     created_at: string | null;
     updated_at: string | null;
     /** Calculado no backend. `none`: o chamado ainda não tem prazo de resolução. */
-    sla: SlaState | 'none';
+    sla?: SlaState | 'none';
     /** Exibição do botão "Assumir" (CHA-06); o backend revalida ao assumir. */
     can_self_assign: boolean;
 }
@@ -91,10 +93,11 @@ export interface TicketDetail {
     number: string;
     title: string;
     description: string;
-    requester: string | null;
+    /** Ausentes na visão restrita do solicitante (RF-24). */
+    requester?: string | null;
     department: string | null;
     category: string | null;
-    priority: TicketPriority;
+    priority?: TicketPriority;
     status: TicketStatus;
     assignee: string | null;
     created_at: string | null;
@@ -437,12 +440,13 @@ export type TicketSortKey = 'number' | 'title' | 'priority' | 'status' | 'assign
 
 export interface TicketFilterOptions {
     statuses: Option[];
-    priorities: Option[];
-    slaStates: Option[];
     departments: Option[];
     categories: Option[];
-    requesters: Option[];
     assignees: Option[];
+    /** Ausentes na visão restrita do solicitante (RF-24). */
+    priorities?: Option[];
+    slaStates?: Option[];
+    requesters?: Option[];
 }
 
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });

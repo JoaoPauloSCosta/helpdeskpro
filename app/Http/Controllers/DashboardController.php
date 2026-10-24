@@ -13,6 +13,7 @@ use App\Models\TicketHistory;
 use App\Models\TicketSlaPause;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -37,11 +38,17 @@ class DashboardController extends Controller
      * `first_response_at`) e resolução efetiva (`resolution_effective_seconds`, sem pausas, dos chamados
      * resolvidos ou encerrados). Só entram chamados em que o dado existe; sem nenhum, a média é nula.
      */
-    public function index(DashboardRequest $request): Response
+    public function index(DashboardRequest $request): Response|RedirectResponse
     {
         Gate::authorize('viewAny', Ticket::class);
 
         $user = $request->user();
+
+        // O solicitante não tem visão geral (RF-24): o chamado basta. Entra direto na listagem dos seus chamados.
+        if ($user->hasRestrictedTicketView()) {
+            return redirect()->route('tickets.index');
+        }
+
         $period = $request->filters();
         $now = now();
 

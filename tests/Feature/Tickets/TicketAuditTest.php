@@ -100,11 +100,38 @@ test('the details page tells whether the audit can be consulted', function () {
         ->get("/tickets/{$this->ticket->ticket_number}")
         ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', true)->missing('history'));
 
-    foreach ([$this->requester, $this->tech] as $user) {
-        $this->actingAs($user)
-            ->get("/tickets/{$this->ticket->ticket_number}")
-            ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', false)->missing('history'));
-    }
+    $this->actingAs($this->requester)
+        ->get("/tickets/{$this->ticket->ticket_number}")
+        ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', false)->missing('history'));
+
+    // O técnico responsável tem `audit.view` por padrão (RF-19, v1.8).
+    $this->actingAs($this->tech)
+        ->get("/tickets/{$this->ticket->ticket_number}")
+        ->assertInertia(fn (Assert $page) => $page->where('can.viewAudit', true)->missing('history'));
+});
+
+test('the technician reads the audit of an assigned ticket but cannot change it', function () {
+    auditFixture($this->ticket, TicketEvent::Closed, null, ['label' => 'Encerrado'], $this->tech);
+
+    $this->actingAs($this->tech)->getJson(auditUrl($this->ticket))->assertOk()->assertJsonPath('ticket', $this->ticket->ticket_number);
+
+    // Somente leitura: não existe rota de escrita e o técnico não ganha nenhuma permissão operacional.
+    $this->actingAs($this->tech)->postJson(auditUrl($this->ticket))->assertStatus(405);
+    $this->actingAs($this->tech)->deleteJson(auditUrl($this->ticket))->assertStatus(405);
+    expect($this->tech->hasPermission('tickets.close'))->toBeFalse()
+        ->and($this->tech->hasPermission('tickets.assign'))->toBeFalse();
+});
+
+test('the technician does not read the audit of a ticket outside the scope', function () {
+    $other = Ticket::factory()->create(['status' => TicketStatus::InProgress, 'assigned_to' => $this->manager->id]);
+
+    $this->actingAs($this->tech)->getJson(auditUrl($other))->assertForbidden();
+});
+
+test('a technician without audit.view is denied', function () {
+    Role::where('slug', 'technician')->first()->permissions()->detach(Permission::where('slug', 'audit.view')->value('id'));
+
+    $this->actingAs($this->tech->fresh())->getJson(auditUrl($this->ticket))->assertForbidden();
 });
 
 test('users without audit.view cannot read the audit, even with access to the ticket', function () {
@@ -113,7 +140,7 @@ test('users without audit.view cannot read the audit, even with access to the ti
     // Solicitante original, técnico responsável e administrador sem a permissão (matriz configurável).
     $noAudit = auditorWithPermissions(['tickets.view_all_departments', 'tickets.view_internal_notes']);
 
-    foreach ([$this->requester, $this->tech, $noAudit] as $user) {
+    foreach ([$this->requester, $noAudit] as $user) {
         $this->actingAs($user)->getJson(auditUrl($this->ticket))->assertForbidden()->assertJsonMissing(['title' => 'Chamado encerrado']);
     }
 });
@@ -334,7 +361,6 @@ test('opening a ticket records a single creation event with the initial values',
         'title' => 'Impressora sem toner',
         'description' => 'Descrição que não deve ir para a auditoria.',
         'category_id' => $this->category->id,
-        'priority' => 'high',
         'submission_token' => (string) Str::uuid(),
     ])->assertSessionHasNoErrors();
 
@@ -354,7 +380,7 @@ test('opening a ticket records a single creation event with the initial values',
         'author' => 'Ana Souza',
         'changes' => [
             ['field' => 'Status inicial', 'to' => 'Aberto'],
-            ['field' => 'Prioridade', 'to' => 'Alta'],
+            ['field' => 'Prioridade', 'to' => 'Média'],
             ['field' => 'Categoria', 'to' => 'Hardware'],
             ['field' => 'Departamento', 'to' => 'Financeiro'],
         ],

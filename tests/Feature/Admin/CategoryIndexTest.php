@@ -289,7 +289,7 @@ test('category administrators see the administration area without other admin pe
     $operator = categoryOperatorWithOnly('categories.manage');
 
     $this->actingAs($operator)
-        ->get('/dashboard')
+        ->get('/profile')
         ->assertInertia(fn (Assert $page) => $page->where('auth.permissions', ['categories.manage']));
 
     $this->actingAs($operator)->get('/admin/departments')->assertForbidden();

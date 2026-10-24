@@ -37,7 +37,7 @@ class TicketExportController extends Controller
             return response()->noContent();
         }
 
-        $stream = $export->write($tickets, $now);
+        $stream = $export->write($tickets, $now, $user->hasRestrictedTicketView());
 
         return new StreamedResponse(function () use ($stream) {
             fpassthru($stream);

@@ -302,7 +302,7 @@ test('sla.manage alone reaches the listing without other administrative areas', 
     $operator = slaOperatorWithOnly('sla.manage');
 
     $this->actingAs($operator)
-        ->get('/dashboard')
+        ->get('/profile')
         ->assertInertia(fn (Assert $page) => $page->where('auth.permissions', ['sla.manage']));
 
     $this->actingAs($operator)->get('/admin/categories')->assertForbidden();

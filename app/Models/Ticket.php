@@ -96,6 +96,12 @@ class Ticket extends Model
         return $this->hasMany(TicketComment::class);
     }
 
+    /** Anexos da abertura e das mensagens (RF-23). A visibilidade de cada um vem da mensagem. */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TicketAttachment::class);
+    }
+
     public function histories(): HasMany
     {
         return $this->hasMany(TicketHistory::class);
@@ -206,8 +212,9 @@ class Ticket extends Model
         $secondsPerMinute = 60 * (100 - SlaState::AT_RISK_PERCENT) / 100;
         $now = $now->format('Y-m-d H:i:s');
 
+        // No SQLite, strftime devolve texto e um inteiro sempre é menor que um texto: o CAST evita um "em risco" falso.
         return $query->getConnection()->getDriverName() === 'sqlite'
-            ? ["(strftime('%s', tickets.resolution_due_at) - tickets.sla_resolution_minutes * {$secondsPerMinute}) <= strftime('%s', ?)", [$now]]
+            ? ["(strftime('%s', tickets.resolution_due_at) - tickets.sla_resolution_minutes * {$secondsPerMinute}) <= CAST(strftime('%s', ?) AS INTEGER)", [$now]]
             : ["DATE_SUB(tickets.resolution_due_at, INTERVAL tickets.sla_resolution_minutes * {$secondsPerMinute} SECOND) <= ?", [$now]];
     }
 

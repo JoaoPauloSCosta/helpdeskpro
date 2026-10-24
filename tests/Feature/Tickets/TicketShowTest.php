@@ -13,6 +13,7 @@ beforeEach(function () {
     $this->seed(RolesAndPermissionsSeeder::class);
 
     $this->requester = User::factory()->withRole('requester')->create(['name' => 'Ana Souza']);
+    $this->manager = User::factory()->withRole('manager')->create(['name' => 'Marina Souza']);
     $this->ticket = Ticket::factory()->create([
         'requester_id' => $this->requester->id,
         'title' => 'Impressora sem toner',
@@ -46,17 +47,15 @@ test('the requester sees the ticket with only the data the page needs', function
             ->where('ticket.number', $this->ticket->ticket_number)
             ->where('ticket.title', 'Impressora sem toner')
             ->where('ticket.description', "Linha 1\nLinha 2 <script>alert(1)</script>")
-            ->where('ticket.requester', 'Ana Souza')
             ->where('ticket.status', 'Aberto')
-            ->where('ticket.priority', 'Média')
             ->where('ticket.assignee', null)
-            // Nenhuma chave primária ou dado interno do chamado na resposta.
+            // Nenhuma chave primária ou dado interno do chamado na resposta; sem solicitante,
+            // prioridade e SLA na visão restrita do solicitante (RF-24).
             ->where('ticket', fn ($ticket) => collect($ticket)->keys()->sort()->values()->all() === [
                 'assignee', 'category', 'created_at', 'department', 'description', 'number',
-                'priority', 'requester', 'status', 'title', 'updated_at',
+                'status', 'title', 'updated_at',
             ])
-            ->has('sla.firstResponse')
-            ->has('sla.resolution')
+            ->where('sla', null)
             ->has('comments', 0)
             ->where('can', [
                 'comment' => true, 'addInternalNote' => false, 'update' => false,
@@ -144,7 +143,7 @@ test('comments are listed in chronological order', function () {
     $response = $this->actingAs($this->requester)->get(showUrl($this->ticket));
 
     expect(collect(detailProps($response)['comments'])->pluck('id')->all())->toBe([$earlier->id, $later->id])
-        ->and(array_keys(detailProps($response)['comments'][0]))->toBe(['id', 'author', 'body', 'internal', 'created_at', 'edited']);
+        ->and(array_keys(detailProps($response)['comments'][0]))->toBe(['id', 'author', 'body', 'internal', 'created_at', 'edited', 'attachments']);
 });
 
 test('the requester adds a public comment as the authenticated author', function () {
@@ -236,8 +235,18 @@ test('closed tickets do not accept new messages', function () {
 
 /* ---------- SLA ---------- */
 
+test('support users see the requester, the priority and the SLA of the ticket', function () {
+    $this->actingAs($this->manager)
+        ->get(showUrl($this->ticket))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('ticket.requester', 'Ana Souza')
+            ->where('ticket.priority', 'Média')
+            ->has('sla.firstResponse')
+            ->has('sla.resolution'));
+});
+
 test('SLA indicators only reflect instants stored by the backend', function () {
-    $this->actingAs($this->requester)
+    $this->actingAs($this->manager)
         ->get(showUrl($this->ticket))
         ->assertInertia(fn (Assert $page) => $page
             ->where('sla.firstResponse', ['state' => 'none', 'due_at' => null, 'met_at' => null, 'target_minutes' => null, 'remaining_seconds' => null, 'breached_at' => null])
@@ -249,7 +258,7 @@ test('SLA indicators only reflect instants stored by the backend', function () {
         'resolution_due_at' => now()->subMinute(),
     ])->save();
 
-    $this->actingAs($this->requester)
+    $this->actingAs($this->manager)
         ->get(showUrl($this->ticket))
         ->assertInertia(fn (Assert $page) => $page
             ->where('sla.firstResponse.state', 'met')

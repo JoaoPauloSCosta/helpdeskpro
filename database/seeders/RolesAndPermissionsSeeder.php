@@ -28,6 +28,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'tickets.add_internal_note' => 'Adicionar notas internas',
         'comments.edit_others' => 'Editar comentários de outros usuários',
         'audit.view' => 'Consultar auditoria',
+        'reports.view_performance' => 'Consultar o painel de desempenho dos técnicos',
         'users.manage' => 'Gerenciar usuários',
         'departments.manage' => 'Gerenciar departamentos',
         'categories.manage' => 'Gerenciar categorias',
@@ -45,6 +46,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'tickets.change_category',
             'tickets.view_internal_notes',
             'tickets.add_internal_note',
+            'audit.view',
         ]],
         'manager' => ['Gestor', [
             'tickets.view_all_departments',
@@ -58,6 +60,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'tickets.view_internal_notes',
             'tickets.add_internal_note',
             'audit.view',
+            'reports.view_performance',
         ]],
         'admin' => ['Administrador', [
             'tickets.view_all_departments',
@@ -65,6 +68,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'tickets.reassign',
             'tickets.view_internal_notes',
             'audit.view',
+            'reports.view_performance',
             'users.manage',
             'departments.manage',
             'categories.manage',
