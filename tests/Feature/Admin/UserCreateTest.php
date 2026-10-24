@@ -359,7 +359,7 @@ test('a failure while auditing leaves no partial record', function () {
 
 /* ---------- Cadastro público ---------- */
 
-test('public registration cannot choose a role, department or status', function () {
+test('public registration cannot choose a role or status, only the department link', function () {
     auth()->logout();
 
     $this->post('/register', [
@@ -375,7 +375,7 @@ test('public registration cannot choose a role, department or status', function 
     $user = User::where('email', 'visitante@example.com')->firstOrFail();
 
     expect($user->role_id)->toBe(roleId('requester'))
-        ->and($user->department_id)->toBeNull()
+        ->and($user->department_id)->toBe($this->department->id)
         ->and($user->is_active)->toBeTrue()
         ->and($user->effectivePermissions())->toBe([])
         ->and(AuditLog::count())->toBe(0);

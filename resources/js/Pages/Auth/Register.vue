@@ -1,13 +1,20 @@
 <script setup lang="ts">
+import Alert from '@/Components/Alert.vue';
 import Button from '@/Components/Button.vue';
 import FormField from '@/Components/FormField.vue';
 import IconInput from '@/Components/IconInput.vue';
+import Select from '@/Components/Select.vue';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+
+const props = defineProps<{
+    departments: { id: number; name: string }[];
+}>();
 
 const form = useForm({
     name: '',
     email: '',
+    department_id: '',
     password: '',
     password_confirmation: '',
 });
@@ -65,6 +72,32 @@ const submit = () => {
                 />
             </FormField>
 
+            <Alert v-if="!props.departments.length" variant="warning" title="Cadastro indisponível">
+                Não há departamentos disponíveis no momento, então não é possível concluir o cadastro.
+                Procure o responsável pelo sistema.
+            </Alert>
+
+            <FormField
+                v-else
+                label="Departamento"
+                required
+                :error="form.errors.department_id"
+                v-slot="{ id, describedby, invalid }"
+            >
+                <Select
+                    :id="id"
+                    v-model="form.department_id"
+                    placeholder="Selecione seu departamento"
+                    required
+                    :invalid="invalid"
+                    :aria-describedby="describedby"
+                >
+                    <option v-for="department in props.departments" :key="department.id" :value="department.id">
+                        {{ department.name }}
+                    </option>
+                </Select>
+            </FormField>
+
             <FormField
                 label="Senha"
                 help="Use pelo menos 8 caracteres."
@@ -104,7 +137,13 @@ const submit = () => {
             </FormField>
 
             <div class="pt-2">
-                <Button type="submit" size="lg" block :loading="form.processing">
+                <Button
+                    type="submit"
+                    size="lg"
+                    block
+                    :loading="form.processing"
+                    :disabled="!props.departments.length"
+                >
                     Criar conta
                 </Button>
             </div>
