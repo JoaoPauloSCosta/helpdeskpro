@@ -106,6 +106,7 @@ class TicketController extends Controller
             'can' => [
                 // A ação só aparece quando a abertura (CHA-02) existir e for autorizada.
                 'create' => Route::has('tickets.create') && $user->can('create', Ticket::class),
+                'export' => TicketExportController::isAllowed($user),
             ],
         ]);
     }

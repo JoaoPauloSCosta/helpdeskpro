@@ -46,7 +46,7 @@ const props = defineProps<{
     hasAnyTicket: boolean;
     /** Visão restrita do solicitante (RF-24): sem identificador, solicitante, prioridade e SLA. */
     restricted: boolean;
-    can: { create: boolean };
+    can: { create: boolean; export: boolean };
 }>();
 
 const page = usePage();
@@ -313,7 +313,7 @@ const mobileSort = computed({
         <div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
             <PageHeader title="Chamados" subtitle="Pesquise e acompanhe os chamados conforme seu acesso.">
                 <Button
-                    v-if="hasAnyTicket"
+                    v-if="can.export && hasAnyTicket"
                     variant="secondary"
                     :loading="exporting"
                     :disabled="processing"

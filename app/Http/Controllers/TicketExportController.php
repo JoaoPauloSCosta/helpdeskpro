@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Tickets\TicketExportRequest;
 use App\Models\Ticket;
+use App\Models\User;
 use App\Support\TicketCsvExport;
 use App\Support\TicketListingQuery;
 use Illuminate\Http\JsonResponse;
@@ -13,6 +14,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TicketExportController extends Controller
 {
+    /** Papéis autorizados a exportar (slugs). */
+    private const ALLOWED_ROLES = ['admin', 'superadmin'];
+
+    public static function isAllowed(?User $user): bool
+    {
+        return $user !== null && in_array($user->role?->slug, self::ALLOWED_ROLES, true);
+    }
+
     /**
      * EXP-01 — Exportação CSV dos chamados (RF-21), somente leitura.
      *
@@ -24,6 +33,8 @@ class TicketExportController extends Controller
     public function __invoke(TicketExportRequest $request, TicketCsvExport $export): Response|JsonResponse
     {
         Gate::authorize('viewAny', Ticket::class);
+
+        abort_unless(self::isAllowed($request->user()), 403);
 
         $user = $request->user();
         $now = now();
