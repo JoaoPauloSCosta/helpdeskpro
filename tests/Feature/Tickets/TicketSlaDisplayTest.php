@@ -191,7 +191,8 @@ test('the listing, the SLA filter and the CSV use the deadlines recorded by the 
         expect($numbers->all())->toBe([$expected->ticket_number]);
     }
 
-    $csv = $this->actingAs($this->manager)->get('/tickets/export')->assertOk()->streamedContent();
+    // A exportação é restrita a administradores e superadministradores.
+    $csv = $this->actingAs(User::factory()->withRole('admin')->create())->get('/tickets/export')->assertOk()->streamedContent();
 
     expect($csv)->toContain('Vencido')->toContain('Em risco')->toContain('Sem prazo definido');
 });

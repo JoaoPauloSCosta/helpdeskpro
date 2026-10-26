@@ -3,18 +3,42 @@
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Models\Department;
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\TicketComment;
 use App\Models\User;
 use App\Support\TicketCsvExport;
+use Database\Seeders\LocalSuperAdminSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Testing\TestResponse;
+use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     $this->seed(RolesAndPermissionsSeeder::class);
-    $this->manager = User::factory()->withRole('manager')->create();
+    $this->admin = User::factory()->withRole('admin')->create();
 });
+
+/** Superadministrador com todas as permissões do catálogo, como em LocalSuperAdminSeeder (que só roda em ambiente local). */
+function exportSuperAdmin(): User
+{
+    $role = Role::firstOrCreate(
+        ['slug' => LocalSuperAdminSeeder::ROLE_SLUG],
+        ['name' => 'Super administrador (teste)', 'is_system' => false],
+    );
+    $role->permissions()->sync(Permission::pluck('id')->mapWithKeys(fn (int $id) => [$id => ['created_at' => now()]])->all());
+
+    return User::factory()->withRole(LocalSuperAdminSeeder::ROLE_SLUG)->create();
+}
+
+/** Administrador sem visão de todos os departamentos: enxerga só os chamados que abriu ou atende. */
+function exportScopedAdmin(): User
+{
+    Role::where('slug', 'admin')->first()->permissions()->detach(Permission::where('slug', 'tickets.view_all_departments')->value('id'));
+
+    return User::factory()->withRole('admin')->create();
+}
 
 /** Linhas do CSV (sem o BOM), cada uma como lista de células. */
 function csvRows(TestResponse $response): array
@@ -49,7 +73,7 @@ test('guests are redirected to login', function () {
 test('inactive users are denied', function () {
     Ticket::factory()->create();
 
-    $this->actingAs(User::factory()->withRole('manager')->inactive()->create())
+    $this->actingAs(User::factory()->withRole('admin')->inactive()->create())
         ->get('/tickets/export')
         ->assertForbidden();
 });
@@ -57,7 +81,7 @@ test('inactive users are denied', function () {
 test('json requests from denied users get 403 without data', function () {
     $ticket = Ticket::factory()->create(['title' => 'Segredo']);
 
-    $response = $this->actingAs(User::factory()->withRole('manager')->inactive()->create())
+    $response = $this->actingAs(User::factory()->withRole('admin')->inactive()->create())
         ->getJson('/tickets/export');
 
     $response->assertForbidden();
@@ -67,46 +91,68 @@ test('json requests from denied users get 403 without data', function () {
 test('the export route is not shadowed by the ticket detail route', function () {
     Ticket::factory()->create();
 
-    $this->actingAs($this->manager)->get('/tickets/export')->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8');
+    $this->actingAs($this->admin)->get('/tickets/export')->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8');
 });
+
+test('administrators and superadministrators export the tickets', function () {
+    $ticket = Ticket::factory()->create();
+
+    expect(exportedNumbers($this->actingAs($this->admin)->get('/tickets/export')))->toBe([$ticket->ticket_number])
+        ->and(exportedNumbers($this->actingAs(exportSuperAdmin())->get('/tickets/export')))->toBe([$ticket->ticket_number]);
+});
+
+test('the other roles are denied and receive no data', function (string $role) {
+    $user = User::factory()->withRole($role)->create();
+    // Chamados que o usuário enxerga na listagem: aberto por ele e atribuído a ele.
+    $own = Ticket::factory()->create(['requester_id' => $user->id, 'title' => 'Chamado próprio']);
+    $assigned = Ticket::factory()->create(['assigned_to' => $user->id, 'status' => TicketStatus::InProgress]);
+
+    $response = $this->actingAs($user)->getJson('/tickets/export');
+
+    $response->assertForbidden();
+    expect($response->headers->get('content-disposition'))->toBeNull()
+        ->and($response->getContent())->not->toContain('Chamado próprio')
+        ->not->toContain($own->ticket_number)->not->toContain($assigned->ticket_number);
+
+    $this->actingAs($user)->get('/tickets/export')->assertForbidden();
+})->with(['requester', 'technician', 'manager']);
+
+test('the listing offers the export only to administrators and superadministrators', function (string $role, bool $allowed) {
+    $user = $role === LocalSuperAdminSeeder::ROLE_SLUG ? exportSuperAdmin() : User::factory()->withRole($role)->create();
+
+    $this->actingAs($user)->get('/tickets')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('can.export', $allowed));
+})->with([
+    'requester' => ['requester', false],
+    'technician' => ['technician', false],
+    'manager' => ['manager', false],
+    'admin' => ['admin', true],
+    'superadmin' => [LocalSuperAdminSeeder::ROLE_SLUG, true],
+]);
 
 /* ---------- Escopo de acesso ---------- */
 
 test('users only export the tickets they can see', function () {
-    $technician = User::factory()->withRole('technician')->create();
-    $requester = User::factory()->withRole('requester')->create();
-    $own = Ticket::factory()->create(['requester_id' => $requester->id]);
-    $assigned = Ticket::factory()->create(['assigned_to' => $technician->id, 'status' => TicketStatus::InProgress]);
+    // O papel exporta, mas o escopo continua sendo o da listagem (Ticket::scopeVisibleTo()).
+    $scoped = exportScopedAdmin();
+    $own = Ticket::factory()->create(['requester_id' => $scoped->id]);
+    $assigned = Ticket::factory()->create(['assigned_to' => $scoped->id, 'status' => TicketStatus::InProgress]);
     $other = Ticket::factory()->create(['status' => TicketStatus::InProgress, 'assigned_to' => User::factory()->withRole('technician')->create()->id]);
 
-    // O solicitante exporta só os próprios chamados, sem a coluna de identificador (RF-24): confere pelo título.
-    $requesterRows = array_slice(csvRows($this->actingAs($requester)->get('/tickets/export')), 1);
-
-    expect(array_column($requesterRows, 0))->toBe([$own->title])
-        // O técnico também enxerga os abertos e sem responsável (autoatribuição, RF-09), como na listagem.
-        ->and(exportedNumbers($this->actingAs($technician)->get('/tickets/export')))->toEqualCanonicalizing([$assigned->ticket_number, $own->ticket_number])
-        ->and(exportedNumbers($this->actingAs($technician)->get('/tickets/export')))->not->toContain($other->ticket_number)
-        ->and(exportedNumbers($this->actingAs($this->manager)->get('/tickets/export')))->toContain($own->ticket_number, $assigned->ticket_number, $other->ticket_number);
+    expect(exportedNumbers($this->actingAs($scoped)->get('/tickets/export')))->toEqualCanonicalizing([$own->ticket_number, $assigned->ticket_number])
+        ->and(exportedNumbers($this->actingAs(exportSuperAdmin())->get('/tickets/export')))->toContain($own->ticket_number, $assigned->ticket_number, $other->ticket_number);
 });
 
 test('filters cannot widen the scope: filtering by another category adds nothing', function () {
-    $requester = User::factory()->withRole('requester')->create();
+    $scoped = exportScopedAdmin();
     $foreign = Ticket::factory()->create();
-    Ticket::factory()->create(['requester_id' => $requester->id]);
+    Ticket::factory()->create(['requester_id' => $scoped->id]);
 
-    $response = $this->actingAs($requester)->get('/tickets/export?'.http_build_query(['category' => $foreign->category_id]));
+    $response = $this->actingAs($scoped)->get('/tickets/export?'.http_build_query(['category' => $foreign->category_id]));
 
     $response->assertNoContent();
 });
-
-test('the requester cannot filter the export by requester, priority, SLA or identifier', function (string $key, string $value) {
-    $requester = User::factory()->withRole('requester')->create();
-    Ticket::factory()->create(['requester_id' => $requester->id]);
-
-    $this->actingAs($requester)->getJson('/tickets/export?'.http_build_query([$key => $value]))
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors($key);
-})->with([['requester', '1'], ['priority', 'high'], ['sla', 'overdue'], ['number', 'HD-AAAAAAAA']]);
 
 /* ---------- Filtros ---------- */
 
@@ -129,7 +175,7 @@ test('every listing filter applies to the export', function (array $query, strin
 
     $query = array_map(fn ($value) => is_callable($value) ? $value($match) : $value, $query);
 
-    expect(exportedNumbers($this->actingAs($this->manager)->get('/tickets/export?'.http_build_query($query))))->toBe([$expected]);
+    expect(exportedNumbers($this->actingAs($this->admin)->get('/tickets/export?'.http_build_query($query))))->toBe([$expected]);
 })->with([
     'search' => [['q' => 'impressora'], 'HD-ALVOALVO'],
     'number' => [['number' => 'alvoalvo'], 'HD-ALVOALVO'],
@@ -147,8 +193,8 @@ test('the export covers every filtered result, not only the current page', funct
     Ticket::factory()->count(40)->create(['status' => TicketStatus::Open]);
     Ticket::factory()->count(3)->create(['status' => TicketStatus::Closed]);
 
-    $all = $this->actingAs($this->manager)->get('/tickets/export?page=2');
-    $filtered = $this->actingAs($this->manager)->get('/tickets/export?status=open&page=3');
+    $all = $this->actingAs($this->admin)->get('/tickets/export?page=2');
+    $filtered = $this->actingAs($this->admin)->get('/tickets/export?status=open&page=3');
 
     expect(csvRows($all))->toHaveCount(1 + 43)
         ->and(csvRows($filtered))->toHaveCount(1 + 40);
@@ -158,16 +204,16 @@ test('the export follows the listing order', function () {
     $old = Ticket::factory()->create(['created_at' => '2026-01-01 00:00:00', 'title' => 'B']);
     $new = Ticket::factory()->create(['created_at' => '2026-02-01 00:00:00', 'title' => 'A']);
 
-    expect(exportedNumbers($this->actingAs($this->manager)->get('/tickets/export')))->toBe([$new->ticket_number, $old->ticket_number])
-        ->and(exportedNumbers($this->actingAs($this->manager)->get('/tickets/export?sort=created_at&direction=asc')))->toBe([$old->ticket_number, $new->ticket_number])
-        ->and(exportedNumbers($this->actingAs($this->manager)->get('/tickets/export?sort=title&direction=asc')))->toBe([$new->ticket_number, $old->ticket_number]);
+    expect(exportedNumbers($this->actingAs($this->admin)->get('/tickets/export')))->toBe([$new->ticket_number, $old->ticket_number])
+        ->and(exportedNumbers($this->actingAs($this->admin)->get('/tickets/export?sort=created_at&direction=asc')))->toBe([$old->ticket_number, $new->ticket_number])
+        ->and(exportedNumbers($this->actingAs($this->admin)->get('/tickets/export?sort=title&direction=asc')))->toBe([$new->ticket_number, $old->ticket_number]);
 });
 
 test('invalid filters are rejected', function (array $query) {
     Ticket::factory()->create();
 
-    $this->actingAs($this->manager)->getJson('/tickets/export?'.http_build_query($query))->assertUnprocessable();
-    $this->actingAs($this->manager)->get('/tickets/export?'.http_build_query($query))->assertRedirect('/tickets');
+    $this->actingAs($this->admin)->getJson('/tickets/export?'.http_build_query($query))->assertUnprocessable();
+    $this->actingAs($this->admin)->get('/tickets/export?'.http_build_query($query))->assertRedirect('/tickets');
 })->with([
     'status' => [['status' => 'nope']],
     'priority' => [['priority' => 'nope']],
@@ -179,7 +225,7 @@ test('invalid filters are rejected', function (array $query) {
 test('no results answer 204 without a file', function () {
     Ticket::factory()->create(['status' => TicketStatus::Open]);
 
-    $response = $this->actingAs($this->manager)->get('/tickets/export?status=closed');
+    $response = $this->actingAs($this->admin)->get('/tickets/export?status=closed');
 
     $response->assertNoContent();
     expect($response->headers->get('content-disposition'))->toBeNull();
@@ -199,7 +245,7 @@ test('headers and columns match the approved definition', function () {
         'resolution_due_at' => '2026-10-12 12:00:00',
     ]);
 
-    $rows = csvRows($this->actingAs($this->manager)->get('/tickets/export'));
+    $rows = csvRows($this->actingAs($this->admin)->get('/tickets/export'));
 
     expect($rows[0])->toBe(TicketCsvExport::HEADERS)
         ->and($rows[0])->toBe(['Identificador', 'Título', 'Solicitante', 'Departamento', 'Categoria', 'Prioridade', 'Status', 'Responsável', 'Situação do SLA', 'Abertura (UTC)', 'Última atualização (UTC)', 'Resolução (UTC)'])
@@ -213,7 +259,7 @@ test('headers and columns match the approved definition', function () {
 test('it sends download headers with a safe, fixed file name', function () {
     Ticket::factory()->create(['title' => 'Falha na rede']);
 
-    $response = $this->actingAs($this->manager)->get('/tickets/export?title=a&filename=../../etc/passwd');
+    $response = $this->actingAs($this->admin)->get('/tickets/export?title=a&filename=../../etc/passwd');
 
     expect($response->headers->get('content-type'))->toBe('text/csv; charset=UTF-8')
         ->and($response->headers->get('content-disposition'))->toMatch('/^attachment; filename="chamados-\d{8}-\d{6}\.csv"$/')
@@ -224,7 +270,7 @@ test('it sends download headers with a safe, fixed file name', function () {
 test('accents are preserved and nulls become empty cells', function () {
     Ticket::factory()->create(['title' => 'Ação não concluída: impressão ç', 'assigned_to' => null]);
 
-    $row = csvRows($this->actingAs($this->manager)->get('/tickets/export'))[1];
+    $row = csvRows($this->actingAs($this->admin)->get('/tickets/export'))[1];
 
     expect($row[1])->toBe('Ação não concluída: impressão ç')
         ->and($row[7])->toBe('')
@@ -235,7 +281,7 @@ test('quotes, delimiters and line breaks are escaped and keep one row per ticket
     $ticket = Ticket::factory()->create(['title' => "Linha 1; \"citada\"\nLinha 2, fim"]);
     Ticket::factory()->create();
 
-    $response = $this->actingAs($this->manager)->get('/tickets/export');
+    $response = $this->actingAs($this->admin)->get('/tickets/export');
     $rows = csvRows($response);
 
     expect($rows)->toHaveCount(3)
@@ -247,7 +293,7 @@ test('a ticket with comments appears once and comment text never leaves the syst
     $ticket = Ticket::factory()->create(['description' => 'DESCRICAO-PRIVADA', 'resolution_summary' => 'SOLUCAO-PRIVADA']);
     TicketComment::factory()->count(3)->create(['ticket_id' => $ticket->id, 'body' => 'NOTA-INTERNA-SECRETA', 'visibility' => 'internal']);
 
-    $response = $this->actingAs($this->manager)->get('/tickets/export');
+    $response = $this->actingAs($this->admin)->get('/tickets/export');
     $content = $response->streamedContent();
 
     expect(substr_count($content, $ticket->ticket_number))->toBe(1)
@@ -271,7 +317,7 @@ test('dangerous titles and names are neutralized in the generated file', functio
     Ticket::factory()->create(['title' => '=HYPERLINK("http://evil.test","clique")', 'requester_id' => $requester->id]);
     Ticket::factory()->create(['title' => '@SUM(1+1)', 'category_id' => TicketCategory::factory()->create(['name' => '+cmd'])->id]);
 
-    $rows = csvRows($this->actingAs($this->manager)->get('/tickets/export'));
+    $rows = csvRows($this->actingAs($this->admin)->get('/tickets/export'));
     $cells = collect($rows)->skip(1)->flatten()->all();
 
     expect($cells)->toContain("'=HYPERLINK(\"http://evil.test\",\"clique\")", "'@SUM(1+1)", "'+cmd", "'=cmd|' /C calc'!A0");
@@ -287,7 +333,7 @@ test('a failure while generating the file is an error, never a truncated success
     Ticket::factory()->count(3)->create();
     $this->mock(TicketCsvExport::class)->shouldReceive('write')->andThrow(new RuntimeException('falha interna'));
 
-    $response = $this->actingAs($this->manager)->getJson('/tickets/export');
+    $response = $this->actingAs($this->admin)->getJson('/tickets/export');
 
     $response->assertStatus(500);
     expect($response->headers->get('content-disposition'))->toBeNull()
@@ -298,14 +344,14 @@ test('exporting does not change any ticket', function () {
     Ticket::factory()->count(2)->create();
     $before = Ticket::query()->orderBy('id')->get()->toArray();
 
-    $this->actingAs($this->manager)->get('/tickets/export')->assertOk()->streamedContent();
+    $this->actingAs($this->admin)->get('/tickets/export')->assertOk()->streamedContent();
 
     expect(Ticket::query()->orderBy('id')->get()->toArray())->toBe($before);
 });
 
 test('only GET is accepted', function () {
     foreach (['post', 'put', 'delete'] as $method) {
-        $this->actingAs($this->manager)->{$method}('/tickets/export')->assertStatus(405);
+        $this->actingAs($this->admin)->{$method}('/tickets/export')->assertStatus(405);
     }
 });
 
@@ -313,7 +359,7 @@ test('the number of queries does not grow with the number of tickets', function 
     $count = function () {
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $this->actingAs($this->manager)->get('/tickets/export')->assertOk()->streamedContent();
+        $this->actingAs($this->admin)->get('/tickets/export')->assertOk()->streamedContent();
 
         return count(DB::getQueryLog());
     };

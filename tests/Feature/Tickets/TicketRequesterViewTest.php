@@ -10,7 +10,8 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 /*
  * Visão restrita do solicitante (RF-24): sem identificador na listagem, prioridade, SLA, solicitante
- * e auditoria, em listagem, detalhe, filtros, ordenação, exportação, dashboard e rotas relacionadas.
+ * e auditoria, em listagem, detalhe, filtros, ordenação, dashboard e rotas relacionadas. A exportação
+ * é negada ao solicitante.
  */
 
 beforeEach(function () {
@@ -121,12 +122,12 @@ test('the requester still sees the public conversation but never internal notes'
         ->and(json_encode($props))->not->toContain('Nota restrita');
 });
 
-test('the export for the requester has no identifier, requester, priority or SLA columns', function () {
-    $content = $this->actingAs($this->requester)->get('/tickets/export')->assertOk()->streamedContent();
+test('the requester cannot export, not even the own tickets', function () {
+    // A exportação é restrita a administradores e superadministradores.
+    $response = $this->actingAs($this->requester)->getJson('/tickets/export');
 
-    expect($content)->toContain('Título')->toContain('Meu chamado')
-        ->not->toContain('Identificador')->not->toContain('Solicitante')->not->toContain('Prioridade')->not->toContain('SLA')
-        ->not->toContain($this->own->ticket_number)->not->toContain('Chamado de outra pessoa');
+    $response->assertForbidden();
+    expect($response->getContent())->not->toContain('Meu chamado')->not->toContain($this->own->ticket_number);
 });
 
 test('the requester has no overview while support users keep it with priority and SLA', function () {
