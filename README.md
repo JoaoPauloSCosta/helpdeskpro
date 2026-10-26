@@ -20,7 +20,6 @@ Monólito em Laravel com Inertia.js e Vue 3, com controle de acesso por papéis 
 - [Comandos úteis](#comandos-úteis)
 - [Testes](#testes)
 - [Limitações conhecidas](#limitações-conhecidas)
-- [Documentação interna](#documentação-interna)
 - [Licença](#licença)
 
 ---
@@ -210,7 +209,7 @@ Para Docker, basta Docker Desktop com Compose.
 
 8. Para o SLA funcionar, agende `php artisan schedule:run` para rodar a cada minuto no Agendador de Tarefas do Windows. Sem isso, as violações de chamados parados não são registradas.
 
-9. Para os e-mails (verificação de conta e recuperação de senha) chegarem à caixa de entrada local, rode o [Mailpit](docs/configuracao-email.md) ou mantenha `MAIL_MAILER=log` e leia o log em `storage/logs`.
+9. Para os e-mails (verificação de conta e recuperação de senha) chegarem à caixa de entrada local, rode o Mailpit ou mantenha `MAIL_MAILER=log` e leia o log em `storage/logs`.
 
 Para o envio de e-mail e as filas, mantenha também um worker rodando:
 
@@ -273,7 +272,7 @@ As variáveis principais estão em `.env.example` (local) e `.env.docker.example
 |---|---|
 | `APP_URL` | Endereço público da aplicação. Usado em links de e-mail. |
 | `DB_*` | Conexão com o banco. |
-| `MAIL_*` | Envio de e-mail. Em produção, configure um serviço oficial (ver [docs/configuracao-email.md](docs/configuracao-email.md)). |
+| `MAIL_*` | Envio de e-mail. Em produção, configure um serviço oficial de e-mail. |
 | `SEED_SUPERADMIN_EMAIL` | Opcional, só em ambiente local. Indica o e-mail que recebe o papel de superadministrador de teste (`LocalSuperAdminSeeder`). Esse papel não é criado fora de `local`. |
 | `ATTACHMENTS_MAX_FILE_KB` | Tamanho máximo por arquivo. Padrão: 10 MB. |
 | `ATTACHMENTS_MAX_FILES` | Arquivos por envio. Padrão: 5. |
@@ -281,7 +280,7 @@ As variáveis principais estão em `.env.example` (local) e `.env.docker.example
 | `ATTACHMENTS_MAX_FILES_PER_TICKET` | Arquivos por chamado. Padrão: 20. |
 | `ATTACHMENTS_MAX_TICKET_KB` | Soma dos arquivos de um chamado. Padrão: 100 MB. |
 
-**Anexos:** o PHP recusa uploads acima de `upload_max_filesize` e `post_max_size` antes do Laravel ver a requisição. Os valores precisam ser maiores que os da aplicação: pelo menos 10 MB por arquivo e mais de 20 MB por envio. No Docker, isso já está em `docker/php.ini`. No XAMPP, ajuste o `php.ini` e reinicie o Apache. Detalhes em [docs/anexos.md](docs/anexos.md).
+**Anexos:** o PHP recusa uploads acima de `upload_max_filesize` e `post_max_size` antes do Laravel ver a requisição. Os valores precisam ser maiores que os da aplicação: pelo menos 10 MB por arquivo e mais de 20 MB por envio. No Docker, isso já está em `docker/php.ini`. No XAMPP, ajuste o `php.ini` e reinicie o Apache.
 
 **Tipos aceitos:** PDF, TXT, CSV, DOCX, XLSX, PNG, JPG/JPEG e WEBP. A conferência é pelo conteúdo do arquivo, não pela extensão. SVG, HTML, scripts e executáveis são recusados.
 
@@ -335,19 +334,6 @@ Antes de publicar uma alteração, rode a suíte e `npm run build`.
 - Não há escalonamento automático de chamados atrasados.
 - Não há integração com e-mail, WhatsApp ou Telegram para abertura de chamados.
 - O projeto é uma aplicação de instância única, sem multi-tenancy.
-
----
-
-## Documentação interna
-
-A pasta `docs/` contém PRD, regras de negócio, design system, diagramas, roteiros de teste e relatórios de QA. Ela **não é versionada** (está no `.gitignore`) e fica disponível apenas no ambiente local de desenvolvimento.
-
-Documentos principais:
-
-- `docs/prd-rn.md`: requisitos funcionais, regras de negócio e matriz de permissões.
-- `docs/design-system.md`: tokens, cores e padrões visuais.
-- `docs/configuracao-email.md`: configuração de e-mail em desenvolvimento e produção.
-- `docs/anexos.md`: limites, tipos aceitos e configuração do PHP para anexos.
 
 ---
 
