@@ -8,8 +8,8 @@
 
 ```mermaid
 erDiagram
-    ROLES ||--o{ USERS : "role_id"
-    DEPARTMENTS ||--o{ USERS : "department_id"
+    ROLES |o--o{ USERS : "role_id"
+    DEPARTMENTS |o--o{ USERS : "department_id"
     ROLES ||--o{ ROLE_PERMISSIONS : ""
     PERMISSIONS ||--o{ ROLE_PERMISSIONS : ""
     USERS ||--o{ TICKETS : "requester_id"
@@ -24,10 +24,16 @@ erDiagram
     TICKETS ||--o{ TICKET_HISTORIES : ""
     TICKETS ||--o{ TICKET_SLA_PAUSES : ""
     TICKET_HISTORIES |o--o| TICKET_SLA_PAUSES : "ticket_history_id"
-    USERS ||--o{ AUDIT_LOGS : "user_id"
+    USERS |o--o{ AUDIT_LOGS : "user_id"
+    USERS ||--o{ TICKET_COMMENTS : "user_id"
+    USERS ||--o{ TICKET_COMMENT_VERSIONS : "edited_by"
+    USERS ||--o{ TICKET_ATTACHMENTS : "uploaded_by"
+    USERS |o--o{ TICKET_HISTORIES : "user_id"
+    USERS ||--o{ TICKET_SLA_PAUSES : "created_by"
+    DEPARTMENTS |o--o{ TICKET_SLA_PAUSES : "related_department_id"
 ```
 
-`audit_logs` se liga ao registro auditado por relação polimórfica (`auditable_type`, `auditable_id`): usuário, departamento, categoria, papel e política de SLA.
+O diagrama cobre todas as chaves estrangeiras de domínio das migrations; `|o--o{` indica chave anulável. `audit_logs` se liga ao registro auditado por relação polimórfica (`auditable_type`, `auditable_id`): usuário, departamento, categoria, papel e política de SLA.
 
 ## Tabelas de domínio
 

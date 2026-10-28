@@ -14,9 +14,9 @@
 
 ## Instalação local (XAMPP, Windows)
 
-Conforme o README e o `.env.example`:
+Conforme o README e o `.env.example` (comandos para o Prompt de Comando do Windows, por causa do `copy`):
 
-```bash
+```bat
 composer install
 npm install
 copy .env.example .env
@@ -62,7 +62,7 @@ O motor de SLA registra violações de chamados parados por `php artisan sla:rec
 
 Passos do README:
 
-```bash
+```bat
 copy .env.docker.example .env.docker
 docker compose run --rm --no-deps -e APP_KEY=base64:x app php artisan key:generate --show
 docker compose up -d --build
@@ -73,6 +73,7 @@ O segundo comando imprime a `APP_KEY`, que deve ser colocada em `.env.docker`. A
 
 Pontos de atenção:
 
+- O entrypoint do `app` (`docker/entrypoint.sh`) exige `APP_KEY`, espera o banco, roda `storage:link` e `migrate --force` **a cada início do container**; em `APP_ENV=production` grava `config:cache`, `route:cache`, `view:cache` e `event:cache`, e fora dela roda `optimize:clear`; por fim ajusta o dono de `storage` e `bootstrap/cache`. Os serviços `queue` e `scheduler` não fazem esse preparo.
 - `docker-compose.override.yml` é carregado automaticamente e coloca `APP_ENV=local`, `APP_DEBUG=true`, monta o código-fonte e sobe um container Vite na porta 5173. **Para produção use `docker compose -f docker-compose.yml up -d`.**
 - `.env.docker` é ignorado pelo Git e criado a partir de `.env.docker.example`.
 - `db:seed --force` também cria `test@example.com`; em produção, remova esse usuário.

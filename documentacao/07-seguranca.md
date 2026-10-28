@@ -17,7 +17,7 @@
 | Notas internas | Filtradas na consulta SQL (comentários, versões, anexos e eventos de auditoria) e ocultas da exportação e do dashboard. | `scopeVisibleTo`, `TicketAuditController` |
 | Visão restrita | Prioridade, SLA e solicitante nem são enviados; filtros e ordenações correspondentes são recusados no servidor. | `TicketController`, `TicketIndexRequest` |
 | Anexos | Lista de extensões, MIME detectado pelo conteúdo, verificações por tipo, nome UUID, disco privado sem URL pública, cotas, download como arquivo com `nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` e `no-store`. 404 quando negado. | `AttachmentInspector`, `StoreTicketAttachments`, `config/attachments.php` |
-| CSV | Neutralização de fórmulas, `nosniff`, `no-store`, nome de arquivo fixo e sem dados do usuário. | `TicketCsvExport`, `TicketExportController` |
+| CSV | Neutralização de fórmulas, `nosniff`, `no-store`, nome de arquivo gerado pelo servidor (`chamados-` mais data e hora UTC), sem dados do usuário. | `TicketCsvExport`, `TicketExportController` |
 | Busca | Curingas `%` e `_` escapados nos filtros `LIKE`. | `TicketListingQuery` |
 | Duplo envio | Token UUID com `Cache::add` atômico. | `SingleSubmission` |
 | Integridade | `restrictOnDelete`, unicidades no banco, transações com `lockForUpdate`. | Migrations, Actions |
@@ -31,20 +31,20 @@ Em ordem aproximada de relevância. A coluna "Situação" diz como cada item foi
 
 | # | Risco | Situação | Detalhe |
 |---|---|---|---|
-| 1 | `DatabaseSeeder` cria `test@example.com` com senha conhecida (senha padrão da factory). | **Comprovado** no código | O passo Docker `db:seed --force` roda com `APP_ENV=production`. A conta nasce sem papel (poucas permissões), mas é uma credencial conhecida. |
+| 1 | `DatabaseSeeder` cria `test@example.com` com senha conhecida (senha padrão da factory). | **Comprovado** no código | O passo do README (`docker compose exec app php artisan db:seed --force`) cria a conta em qualquer ambiente. No fluxo padrão, o `docker-compose.override.yml` (carregado automaticamente) força `APP_ENV=local`; só com `-f docker-compose.yml` e o `.env.docker.example` o ambiente é `production`. A conta nasce sem papel (poucas permissões), mas é uma credencial conhecida. |
 | 2 | Login de usuário inativo não é bloqueado na autenticação. | **Comprovado** no código; sem teste | Policies negam as telas, mas `/profile` só exige `auth`. |
 | 3 | Exclusão de conta própria (`ProfileController::destroy`) é exclusão real. | **Inferido** do esquema; não executado | Deve falhar por chave estrangeira para quem tem atividade; qualquer papel pode se excluir. |
 | 4 | Cadastro público sem limitador próprio e sem verificação de e-mail obrigatória. | **Comprovado** | Qualquer pessoa cria conta de Solicitante e abre chamados com anexos. |
-| 5 | `verified` não bloqueia. | **Comprovado** no fonte do framework | O `User` usa a trait `MustVerifyEmail`, mas não implementa a interface. O PRD diz "quando habilitada". |
+| 5 | `verified` não bloqueia. | **Comprovado** no fonte do framework | O `User` herda a trait `MustVerifyEmail` da classe base `Illuminate\Foundation\Auth\User`, mas não implementa a interface (o `use` dela está comentado em `app/Models/User.php`), e `EnsureEmailIsVerified` só barra quem é `instanceof MustVerifyEmail`. O PRD diz "quando habilitada". |
 | 6 | `UpdateTicketAttributes` não reautoriza sob lock. | **Comprovado** | Janela estreita em que um chamado encerrado entre a autorização e o lock ainda poderia ser editado. |
 | 7 | Sem antivírus e sem exclusão de anexos. | **Declarado** no README | A inspeção por conteúdo não substitui um scanner. |
 | 8 | Fonte carregada de `fonts.bunny.net`. | **Comprovado** | Requisição a terceiro em cada página (privacidade e disponibilidade). |
 | 9 | O Inertia compartilha o usuário inteiro (`$request->user()`). | **Comprovado** | Campos ocultos (`password`, `remember_token`) não saem, mas e-mail, papel e situação sim. |
 | 10 | `docker compose up` sobe em modo desenvolvimento. | **Comprovado** | O override define `APP_DEBUG=true`. Produção exige `-f docker-compose.yml`. |
 | 11 | Concorrência dos locks só é garantida em MariaDB. | **Pendente** (não testado) | A suíte usa SQLite. |
-| 12 | A exportação CSV é autorizada pelo **papel** (`admin`/`superadmin`), fora do modelo de permissões. | **Comprovado** | Não muda com a matriz de permissões; o escopo exportado depende de `tickets.view_all_departments`. |
-| 13 | O Administrador conta como "equipe" para o código (`view_internal_notes`), mas não para o diagrama de casos de uso. | **Comprovado** | Ele vê SLA, dados de pendência e dashboard, e seu comentário público vale como primeira resposta do SLA. Decidir se é intencional (D6). |
-| 14 | O registro de violações de SLA depende de um agendador externo. | **Comprovado** no código; execução **pendente** de verificação | O código agenda o comando a cada minuto; quem executa `schedule:run` varia por ambiente. |
+| 12 | A exportação CSV é autorizada pelo **papel** (`admin`/`superadmin`), fora do modelo de permissões. | **Comprovado** | Não muda com a matriz de permissões; o escopo exportado depende de `tickets.view_all_departments`. Mesmo tema de T2. |
+| 13 | O Administrador conta como "equipe" para o código (`view_internal_notes`), mas não para o diagrama de casos de uso. | **Comprovado** | Ele vê SLA, dados de pendência e dashboard, e seu comentário público vale como primeira resposta do SLA. Decidir se é intencional (D6; mesmo tema de T24). |
+| 14 | O registro de violações de SLA depende de um agendador externo. | **Comprovado** no código; execução **pendente** de verificação | O código agenda o comando a cada minuto; quem executa `schedule:run` varia por ambiente. Mesmo tema de T26. |
 | 15 | `storage/framework/lsp-8ebd30caf6e53d1a.php` foi versionado no último commit. | **Comprovado** | Arquivo auxiliar de IDE (o commit o descreve como helper do LSP). Não foi inspecionado quanto a dados sensíveis; não deveria estar no Git (T16). |
 
 ## Não verificado

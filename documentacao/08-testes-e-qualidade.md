@@ -15,7 +15,7 @@ Executado nesta análise, com autorização do responsável, na máquina local (
 
 Efeitos em arquivos ignorados pelo Git: `public/build/` regenerado (107 arquivos de `assets/` substituídos) e `storage/logs/laravel.log` com 6,4 KB a mais (duas entradas de falhas simuladas de propósito pelos testes, em `UserCreateTest.php:226` e `TicketExportTest.php:334`). Existe um `public/hot` (faz a aplicação procurar assets no servidor do Vite); esta análise não o alterou nem o removeu.
 
-O número bate com o declarado em `TESTES.md`. Contagem estática: 1.039 chamadas `test()`/`it()` em 61 arquivos; datasets expandem isso até 1.486 casos. Os resultados valem para o código e o ambiente daquela data, em SQLite.
+O número bate com o declarado em `TESTES.md`. Contagem estática: 1.039 chamadas `test()`/`it()` em 59 arquivos (a pasta `tests/` tem 61 arquivos `.php`, contando os de apoio); datasets expandem isso até 1.486 casos. Os resultados valem para o código e o ambiente daquela data, em SQLite.
 
 ## Ferramental
 
@@ -53,7 +53,7 @@ Módulos com mais casos (contagem de `test()`/`it()` por arquivo): `TicketPendin
 | Item | Situação |
 |---|---|
 | Tipos no frontend | `vue-tsc` em modo `strict` roda dentro de `npm run build` e passou. |
-| Estilo PHP | Pint 1.30.4 instalado, **sem `pint.json`**; não foi executado nesta análise. |
+| Estilo PHP | Pint 1.30.4 instalado, **sem `pint.json`**; não foi executado nesta análise. Segundo `docs/pendencias.md` (24/10/2026), o Pint já falhava no baseline por fim de linha CRLF e estilo de código antigo, e o projeto inteiro não foi reformatado. |
 | ESLint, Prettier, PHPStan | Não existem. |
 | CI | Não há pipeline; a suíte é rodada à mão. |
 | Testes de frontend | Não existem (nem de componentes nem de ponta a ponta). |

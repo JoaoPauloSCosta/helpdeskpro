@@ -178,3 +178,4 @@ Mesmo escopo, filtros e ordenação da listagem, sobre todas as linhas visíveis
 | O Administrador conta como "equipe de atendimento"? | No código sim (tem `view_internal_notes`); no diagrama não (D6). Pendente. |
 | A edição de comentário será entregue? | Pendente: implementar a rota ou retirar a permissão. |
 | Verificação de e-mail obrigatória | O PRD diz "quando habilitada"; hoje não está. Pendente. |
+| A exportação deve ser auditada? | O PRD (RF-21, regra 6) diz que a operação "poderá ser auditada". Não há evento de exportação em `TicketEvent` nem em `AdminEvent`. Pendente (T29). |

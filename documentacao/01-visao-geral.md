@@ -66,11 +66,11 @@ Declarados e sem uso: `laravel/sanctum` e `@tailwindcss/vite ^4` (ver T18 em [10
 
 Comprovados nesta análise, salvo indicação.
 
-- 34 commits de um único autor (Git), de 21 a 27/10/2026. **32 deles terminam com `Co-Authored-By: Claude`** (conferido no histórico).
+- Até o commit `bdb7667`: 34 commits de um único autor (Git), de 21 a 27/10/2026. **32 deles terminam com `Co-Authored-By: Claude`** (conferido no histórico). Os commits posteriores da documentação também levam o trailer, então o `HEAD` atual tem mais commits e mais trailers.
 - 18 migrations e 21 tabelas; 20 permissões e 4 papéis semeados (mais o `superadmin` local).
 - 71 rotas segundo `php artisan route:list` em ambiente local (inclui `/design-system`, só registrada em `local`): 55 em `routes/web.php`, 15 em `routes/auth.php` e 1 do design system.
-- 61 arquivos em `tests/`. **Execução de 27/10/2026: 1.486 testes aprovados, 0 falhas, 9.596 asserções, 122,78 s.** `npm run build` sem erros.
+- 61 arquivos `.php` em `tests/` (59 com testes). **Execução de 27/10/2026: 1.486 testes aprovados, 0 falhas, 9.596 asserções, 122,78 s.** `npm run build` sem erros.
 
 ## Documentos relacionados
 
-Referência funcional de casos de uso: [casos-de-uso.md](casos-de-uso.md). O PRD (v1.8) e as regras de negócio ficam em `docs/`, fora do Git; o código cita seus identificadores (RF-xx, CHA-xx, ADM-xx, SLA-xx, PER-xx) em comentários.
+Referência funcional de casos de uso: [casos-de-uso.md](casos-de-uso.md). Os arquivos de `docs/` ainda não comparados com o código estão listados no [README.md](README.md). O PRD (v1.8) e as regras de negócio ficam em `docs/`, fora do Git; o código cita seus identificadores (RF-xx, CHA-xx, ADM-xx, SLA-xx, PER-xx) em comentários.

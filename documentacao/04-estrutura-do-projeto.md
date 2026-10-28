@@ -61,7 +61,7 @@ Um por tela ou ação, agrupados por módulo (`Tickets/`, `Users/`, `Roles/`, `D
 
 | Model | Papel |
 |---|---|
-| `User` | Papel e departamento, `is_active`, `hasPermission`, `effectivePermissions`, `hasRestrictedTicketView`, `eligibleAssignees`, `editVersion`. Usa a trait `MustVerifyEmail` sem implementar a interface. |
+| `User` | Papel e departamento, `is_active`, `hasPermission`, `effectivePermissions`, `hasRestrictedTicketView`, `eligibleAssignees`, `editVersion`. Herda a trait `MustVerifyEmail` da classe base e não implementa a interface (o `use` dela está comentado). |
 | `Role`, `Permission` | RBAC; `Role::isGrantableBy`; `Permission::ADMINISTRATIVE`. |
 | `Department`, `TicketCategory` | Cadastros com inativação. |
 | `Ticket` | Núcleo do domínio: `scopeVisibleTo`, `slaState`, `scopeWhereSlaState`, `getRouteKeyName` (número público). |
@@ -104,8 +104,8 @@ Um por tela ou ação, agrupados por módulo (`Tickets/`, `Users/`, `Roles/`, `D
 |---|---|
 | `app.ts` | `createInertiaApp`, resolve páginas por `import.meta.glob`, instala `ZiggyVue`. |
 | `Layouts/` | `AuthenticatedLayout`, `AuthLayout`, `GuestLayout`. |
-| `Pages/` | Uma página por tela: `Auth/`, `Tickets/` (`Index`, `Create`, `Edit`, `Show` e 10 modais em `Partials/`), `Dashboard`, `Performance/`, `Admin/` (usuários, departamentos, categorias, papéis, permissões), `SlaPolicies/`, `Audit/`, `Profile/` (5 parciais), `Error`, `DesignSystem`. |
-| `Components/` | 54 componentes reutilizáveis. Quatro herdados do Breeze não são usados: `DangerButton`, `NavLink`, `ResponsiveNavLink`, `SecondaryButton`. |
+| `Pages/` | Uma página por tela: `Auth/`, `Tickets/` (`Index`, `Create`, `Edit`, `Show` e 10 componentes de apoio em `Partials/`: 7 usam `<Modal`; `AuditHistory` e `SlaHistory` não são modais, e `SelfAssignModal` não foi verificado), `Dashboard`, `Performance/`, `Admin/` (usuários, departamentos, categorias, papéis, permissões), `SlaPolicies/`, `Audit/`, `Profile/` (5 parciais), `Error`, `DesignSystem`. |
+| `Components/` | 54 componentes reutilizáveis. Dois herdados do Breeze não têm uso (`NavLink` e `ResponsiveNavLink`); `DangerButton` e `SecondaryButton` só aparecem em `Pages/DesignSystem.vue`. |
 | `composables/` | `useListing` (pesquisa, filtros, ordenação e paginação no servidor, sincronizados com a URL), `useLeaveGuard` (confirma saída com alterações), `useToast`. |
 | `lib/` | Tipos e utilitários por módulo (`ticket.ts`, `sla.ts`, `dashboard.ts`, `navigation.ts`, `attachments.ts`...). |
 | `types/` | Declarações globais. |

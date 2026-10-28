@@ -1,5 +1,7 @@
 # Casos de uso
 
+> Atualizado em 27/10/2026 (commit `bdb7667`). Convenção de confiança em [README.md](README.md); as marcas deste documento estão na legenda da seção 1.
+
 Este documento integra a referência funcional de casos de uso ao código real do Help Desk Pro. A referência é o diagrama UML do responsável pelo sistema; aqui cada elemento dele é ligado aos arquivos que o implementam, e as diferenças comprovadas são registradas.
 
 ## 1. Objetivo e escopo
@@ -110,7 +112,7 @@ A referência liga o Servidor de e-mail a "Recuperar senha" e a "Enviar convite"
 
 ## 4. Matriz padrão de permissões
 
-Reproduz a matriz da referência. **Não** representa as permissões atuais de uma instalação: veja a seção 7.
+Reproduz a matriz da referência. **Não** representa as permissões atuais de uma instalação: veja a seção 7. A matriz canônica por permissão está em [05-rotas-e-permissoes.md](05-rotas-e-permissoes.md); esta tabela a reorganiza por caso de uso.
 
 | Caso de uso | Regra no código [REF] | Solicitante | Técnico | Gestor | Admin |
 |---|---|:-:|:-:|:-:|:-:|
