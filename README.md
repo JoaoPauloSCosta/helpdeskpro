@@ -150,7 +150,7 @@ resources/js/
 routes/
 ├── web.php           Rotas da aplicação, com a autorização descrita em comentários
 ├── auth.php          Login, cadastro, recuperação de senha e verificação de e-mail
-└── console.php       Agendamento (sla:record-breaches a cada minuto)
+└── console.php       Agendamento (sla:record-breaches a cada minuto; tickets:close-resolved a cada 15 minutos)
 tests/
 ├── Feature/          Testes de fluxo HTTP, por módulo
 └── Unit/             Regras puras (SlaClock, transições de status)

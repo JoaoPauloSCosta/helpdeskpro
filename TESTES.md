@@ -181,7 +181,7 @@ Contagem de casos declarados (`it(...)`/`test(...)`) por arquivo. Vários casos 
 
 | Módulo | Arquivos | Casos | O que cobre |
 |---|---|---|---|
-| Chamados | 17 | 371 | Abertura, listagem, detalhe, edição, atribuição e autoatribuição, status, pendências, resolução, reabertura, encerramento, comentários e versões, anexos, exportação CSV (restrita a administradores), visão restrita do solicitante e auditoria por chamado |
+| Chamados | 18 | 377 | Abertura, listagem, detalhe, edição, atribuição e autoatribuição, status, pendências, resolução, reabertura, encerramento, encerramento automático após 3 dias (`tickets:close-resolved`), comentários e versões, anexos, exportação CSV (restrita a administradores), visão restrita do solicitante e auditoria por chamado |
 | SLA | 13 | 201 | Primeira resposta, prazo de resolução, pausa e retomada, mudança de prioridade, chamados em risco, histórico de SLA, registro de violações (`sla:record-breaches`) e políticas de SLA |
 | Administração | 15 | 327 | Usuários, departamentos, categorias, papéis, matriz de permissões, catálogo de permissões e migration de concessão de permissão |
 | Auditoria e indicadores | 3 | 76 | Auditoria global, Visão geral (dashboard) e painel de desempenho |

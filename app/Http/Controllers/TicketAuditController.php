@@ -137,7 +137,9 @@ class TicketAuditController extends Controller
                 $this->detail('Prazo de resolução antes da reabertura', $new['resolution_due_before'] ?? null, 'datetime'),
                 $this->detail('Prazo de resolução depois da reabertura', $new['resolution_due_at'] ?? null, 'datetime'),
             ]],
-            TicketEvent::Closed => [null, 'neutral', null, [$this->change('Status', $old, $new)], [
+            TicketEvent::Closed => [null, 'neutral', ($new['automatic'] ?? false)
+                ? "Encerrado automaticamente: {$new['auto_close_days']} dias sem reabertura pelo solicitante."
+                : null, [$this->change('Status', $old, $new)], [
                 $this->detail('Encerrado em', $new['closed_at'] ?? null, 'datetime'),
             ]],
             TicketEvent::SlaTargetsChanged => [null, 'primary', null, [
