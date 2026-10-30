@@ -33,6 +33,13 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // O perfil nunca é destino de entrada: uma URL "intended" gravada por uma requisição
+        // anônima a ele (aba antiga, sessão expirada) não deve sobrepor a página inicial.
+        // O dashboard leva o solicitante à listagem de chamados (RF-24).
+        if (parse_url((string) $request->session()->get('url.intended'), PHP_URL_PATH) === route('profile.edit', absolute: false)) {
+            $request->session()->forget('url.intended');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

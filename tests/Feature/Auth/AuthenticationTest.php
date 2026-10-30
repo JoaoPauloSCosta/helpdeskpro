@@ -20,6 +20,28 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
+test('login ignores a stale intended profile url and goes to the dashboard', function () {
+    $user = User::factory()->create();
+
+    $this->get('/profile')->assertRedirect('/login');
+
+    $this->post('/login', [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('dashboard', absolute: false));
+});
+
+test('login still returns to the page that required authentication', function () {
+    $user = User::factory()->create();
+
+    $this->get('/tickets')->assertRedirect('/login');
+
+    $this->post('/login', [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect('/tickets');
+});
+
 test('users can not authenticate with invalid password', function () {
     $user = User::factory()->create();
 
