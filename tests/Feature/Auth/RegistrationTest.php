@@ -183,3 +183,14 @@ test('legacy users without a department keep working but cannot open tickets', f
     expect($legacy->fresh()->department_id)->toBeNull()
         ->and(Ticket::count())->toBe(0);
 });
+
+test('a failure sending the verification email does not break the registration', function () {
+    Notification::shouldReceive('send')->andThrow(new RuntimeException('SMTP fora do ar'));
+
+    $response = $this->post('/register', registrationData());
+
+    $this->assertAuthenticated();
+    $response->assertRedirect(route('verification.notice', absolute: false))
+        ->assertSessionHas('warning');
+    expect(User::where('email', 'test@example.com')->exists())->toBeTrue();
+});

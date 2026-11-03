@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { watch } from 'vue';
+import Button from '@/Components/Button.vue';
 import { useToast } from '@/composables/useToast';
-import GuestLayout from '@/Layouts/GuestLayout.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
+import AuthLayout from '@/Layouts/AuthLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 const props = defineProps<{
@@ -28,32 +28,36 @@ watch(
 </script>
 
 <template>
-    <GuestLayout>
-        <Head title="Email Verification" />
+    <AuthLayout security-note="Por segurança, o link expira em 60 minutos">
+        <Head title="Confirmar e-mail" />
 
-        <div class="mb-4 text-sm text-neutral-600">
-            Thanks for signing up! Before getting started, could you verify your
-            email address by clicking on the link we just emailed to you? If you
-            didn't receive the email, we will gladly send you another.
-        </div>
+        <p class="mb-2.5 text-xs font-bold uppercase tracking-widest text-primary-600">
+            Confirmação de cadastro
+        </p>
+        <h2 class="mb-2 text-3xl font-bold tracking-tight text-neutral-900">
+            Confirme seu e-mail
+        </h2>
+        <p class="mb-8 text-sm text-neutral-500">
+            Enviamos um link de confirmação para o e-mail informado no cadastro. Clique nele para
+            começar a usar o sistema. Não recebeu? Confira a caixa de spam ou peça um novo envio.
+        </p>
 
-        <form @submit.prevent="submit">
-            <div class="mt-4 flex items-center justify-between">
-                <PrimaryButton
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="form.processing"
-                >
-                    Resend Verification Email
-                </PrimaryButton>
-
-                <Link
-                    :href="route('logout')"
-                    method="post"
-                    as="button"
-                    class="rounded-md text-sm text-neutral-600 underline hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-                    >Log Out</Link
-                >
-            </div>
+        <form novalidate @submit.prevent="submit">
+            <Button type="submit" size="lg" block :loading="form.processing">
+                Reenviar link de confirmação
+            </Button>
         </form>
-    </GuestLayout>
+
+        <p class="mt-6 text-center text-sm text-neutral-500">
+            Cadastrou o e-mail errado?
+            <Link
+                :href="route('logout')"
+                method="post"
+                as="button"
+                class="ms-1 rounded-md font-semibold text-primary-600 hover:text-primary-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            >
+                Sair
+            </Link>
+        </p>
+    </AuthLayout>
 </template>

@@ -16,6 +16,7 @@ use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class RegisteredUserController extends Controller
 {
@@ -69,9 +70,18 @@ class RegisteredUserController extends Controller
         ]);
         $user->save();
 
-        event(new Registered($user));
-
         Auth::login($user);
+
+        // A conta já existe: uma falha no envio do e-mail não pode virar erro 500 (o usuário ficaria
+        // com um cadastro que não consegue usar). Ele pede um novo envio na tela de confirmação.
+        try {
+            event(new Registered($user));
+        } catch (Throwable $e) {
+            report($e);
+
+            return redirect(route('verification.notice', absolute: false))
+                ->with('warning', 'Não foi possível enviar o e-mail de confirmação. Use "Reenviar link de confirmação" para tentar de novo.');
+        }
 
         return redirect(route('dashboard', absolute: false));
     }
