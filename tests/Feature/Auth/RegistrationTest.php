@@ -6,6 +6,8 @@ use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -63,6 +65,29 @@ test('new users can register', function () {
 
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
+});
+
+test('new users must verify their email before using the system', function () {
+    Notification::fake();
+
+    $this->post('/register', registrationData());
+
+    $user = User::where('email', 'test@example.com')->firstOrFail();
+
+    expect($user->hasVerifiedEmail())->toBeFalse();
+    Notification::assertSentTo($user, VerifyEmail::class);
+
+    $this->actingAs($user)->get(route('tickets.index'))->assertRedirect(route('verification.notice'));
+});
+
+test('registration is rate limited', function () {
+    foreach (range(1, 6) as $i) {
+        $this->post('/register', registrationData(['email' => "user{$i}@example.com"]));
+        auth()->logout();
+    }
+
+    $this->post('/register', registrationData(['email' => 'user7@example.com']))->assertTooManyRequests();
+    expect(User::where('email', 'user7@example.com')->exists())->toBeFalse();
 });
 
 test('the selected department is saved on the user', function () {
@@ -137,7 +162,10 @@ test('a user registered with a department can open a ticket', function () {
     $this->post('/register', registrationData());
 
     // Recarrega o usuário: a instância criada no cadastro ainda não traz o default `is_active` do banco.
-    $this->actingAs(User::where('email', 'test@example.com')->firstOrFail())
+    $user = User::where('email', 'test@example.com')->firstOrFail();
+    $user->markEmailAsVerified();
+
+    $this->actingAs($user)
         ->post(route('tickets.store'), ticketData())
         ->assertSessionDoesntHaveErrors()
         ->assertRedirect();

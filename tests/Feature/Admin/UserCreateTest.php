@@ -218,7 +218,8 @@ test('inactive users are created without an invitation', function () {
     expect($user->is_active)->toBeFalse();
     Notification::assertNothingSent();
 
-    // Inativo, não executa operações protegidas (RF-02).
+    // Inativo, não executa operações protegidas (RF-02), mesmo depois de verificar o e-mail.
+    $user->markEmailAsVerified();
     $this->actingAs($user)->get('/tickets')->assertForbidden();
 });
 

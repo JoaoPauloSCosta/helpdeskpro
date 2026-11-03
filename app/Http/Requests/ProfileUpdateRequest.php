@@ -9,6 +9,12 @@ use Illuminate\Validation\Rule;
 
 class ProfileUpdateRequest extends FormRequest
 {
+    /** Sessões abertas antes da inativação (RF-02) não alteram mais nome nem e-mail. */
+    public function authorize(): bool
+    {
+        return $this->user()->is_active;
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '@/Components/PageHeader.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import DeleteUserForm from './Partials/DeleteUserForm.vue';
 import ProfileSummaryCard from './Partials/ProfileSummaryCard.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
@@ -32,7 +31,6 @@ defineProps<{
                         :status="status"
                     />
                     <UpdatePasswordForm />
-                    <DeleteUserForm />
                 </div>
             </div>
         </div>

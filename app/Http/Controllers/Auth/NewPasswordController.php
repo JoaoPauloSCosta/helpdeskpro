@@ -49,6 +49,8 @@ class NewPasswordController extends Controller
                 $user->forceFill([
                     'password' => Hash::make($request->password),
                     'remember_token' => Str::random(60),
+                    // O link chegou ao e-mail, o que já comprova o endereço (convite da ADM-02).
+                    'email_verified_at' => $user->email_verified_at ?? now(),
                 ])->save();
 
                 event(new PasswordReset($user));

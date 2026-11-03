@@ -20,6 +20,15 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
+test('inactive users cannot authenticate', function () {
+    $user = User::factory()->inactive()->create();
+
+    $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+        ->assertSessionHasErrors(['email' => trans('auth.failed')]);
+
+    $this->assertGuest();
+});
+
 test('login ignores a stale intended profile url and goes to the dashboard', function () {
     $user = User::factory()->create();
 

@@ -51,38 +51,25 @@ test('email verification status is unchanged when the email address is unchanged
     $this->assertNotNull($user->refresh()->email_verified_at);
 });
 
-test('user can delete their account', function () {
+test('users cannot delete their own account', function () {
+    // A conta é inativada pela administração (ADM-03), nunca apagada: o histórico depende dela.
     $user = User::factory()->create();
 
-    $response = $this
-        ->actingAs($user)
-        ->delete('/profile', [
-            'password' => 'password',
-        ]);
-
-    $response
-        ->assertSessionHasNoErrors()
-        ->assertRedirect('/');
-
-    $this->assertGuest();
-    $this->assertNull($user->fresh());
-});
-
-test('correct password must be provided to delete account', function () {
-    $user = User::factory()->create();
-
-    $response = $this
-        ->actingAs($user)
-        ->from('/profile')
-        ->delete('/profile', [
-            'password' => 'wrong-password',
-        ]);
-
-    $response
-        ->assertSessionHasErrors('password')
-        ->assertRedirect('/profile');
+    $this->actingAs($user)
+        ->delete('/profile', ['password' => 'password'])
+        ->assertMethodNotAllowed();
 
     $this->assertNotNull($user->fresh());
+});
+
+test('inactive users with an open session cannot change their profile', function () {
+    $user = User::factory()->inactive()->create();
+
+    $this->actingAs($user)
+        ->patch('/profile', ['name' => 'Outro nome', 'email' => 'outro@example.com'])
+        ->assertForbidden();
+
+    expect($user->fresh()->email)->not->toBe('outro@example.com');
 });
 
 test('guests are redirected to login when opening the profile page', function () {
