@@ -19,6 +19,7 @@ import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AssignTechnicianModal from '@/Pages/Tickets/Partials/AssignTechnicianModal.vue';
 import AuditHistory from '@/Pages/Tickets/Partials/AuditHistory.vue';
+import ChatConversationCard from '@/Pages/Tickets/Partials/ChatConversationCard.vue';
 import ChangeStatusModal from '@/Pages/Tickets/Partials/ChangeStatusModal.vue';
 import CloseModal from '@/Pages/Tickets/Partials/CloseModal.vue';
 import CommentHistoryModal from '@/Pages/Tickets/Partials/CommentHistoryModal.vue';
@@ -48,6 +49,7 @@ import {
 } from '@/lib/ticket';
 import { formatTarget } from '@/lib/sla';
 import type { AttachmentLimits, TicketAttachment } from '@/lib/attachments';
+import type { TicketChatSummary } from '@/lib/chat';
 
 const props = defineProps<{
     ticket: TicketDetail;
@@ -82,6 +84,8 @@ const props = defineProps<{
     activePending: TicketActivePending | null;
     /** `null`: o usuário não resolve chamados (`tickets.resolve`). */
     resolutionForm: TicketResolutionForm | null;
+    /** `null`: o chamado não foi gerado por um atendimento via chat (RF-34). */
+    chatSession: TicketChatSummary | null;
     /** `null`: o chamado não está resolvido nem encerrado. */
     resolution: TicketResolution | null;
     /** `null`: o usuário não é o solicitante original (CHA-10). */
@@ -397,6 +401,9 @@ const commentCount = computed(() =>
                             </div>
                         </dl>
                     </Card>
+
+                    <!-- Conversa do atendimento via chat (RF-34): lida sob demanda -->
+                    <ChatConversationCard v-if="chatSession" :ticket="ticket.number" :chat="chatSession" />
 
                     <!-- Solução registrada (RF-12): texto gravado pelo backend, sempre como texto -->
                     <Card v-if="resolution">

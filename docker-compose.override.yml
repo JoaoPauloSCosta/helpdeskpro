@@ -27,6 +27,9 @@ services:
   scheduler:
     <<: *dev
 
+  reverb:
+    <<: *dev
+
   vite:
     image: node:22-alpine
     working_dir: /app

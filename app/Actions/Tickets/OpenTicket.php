@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Support\SlaClock;
 use App\Support\TicketNumberGenerator;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -33,7 +34,7 @@ class OpenTicket
 
     /**
      * @param  array{title: string, description: string, category_id: int}  $data
-     * @param  list<\Illuminate\Http\UploadedFile>  $files  Anexos da abertura (RF-23), públicos; gravados na mesma transação.
+     * @param  list<UploadedFile>  $files  Anexos da abertura (RF-23), públicos; gravados na mesma transação.
      *
      * @throws TicketNumberUnavailable
      */
@@ -54,7 +55,7 @@ class OpenTicket
 
             try {
                 DB::transaction(function () use ($ticket, $requester, $files, &$written) {
-                    $this->applySla($ticket);
+                    SlaClock::applyPolicy($ticket, now());
                     $ticket->save();
                     $this->recordCreation($ticket, $requester);
                     ($this->attachments)($requester, $ticket, null, $files, $written);
@@ -74,28 +75,14 @@ class OpenTicket
         throw new TicketNumberUnavailable;
     }
 
-    /** Política ativa, cópia das metas e prazos a partir do instante de criação (D2: sem política, tudo nulo). */
-    private function applySla(Ticket $ticket): void
-    {
-        $createdAt = now();
-        $policy = SlaClock::policyFor($ticket->priority);
-
-        $ticket->forceFill([
-            'created_at' => $createdAt,
-            'updated_at' => $createdAt,
-            'sla_policy_id' => $policy?->id,
-            'sla_first_response_minutes' => $policy?->first_response_minutes,
-            'sla_resolution_minutes' => $policy?->resolution_minutes,
-            'first_response_due_at' => $policy ? $createdAt->copy()->addMinutes($policy->first_response_minutes) : null,
-            'resolution_due_at' => $policy ? $createdAt->copy()->addMinutes($policy->resolution_minutes) : null,
-        ]);
-    }
-
     /**
      * Valores iniciais do chamado. Guarda também os nomes, para o histórico continuar legível se o
      * cadastro for renomeado. A descrição fica no próprio chamado e não é copiada para a auditoria.
+     * `$extra` acrescenta dados da origem (chamado gerado pelo chat, RF-34).
+     *
+     * @param  array<string, mixed>  $extra
      */
-    private function recordCreation(Ticket $ticket, User $requester): void
+    public function recordCreation(Ticket $ticket, User $requester, array $extra = []): void
     {
         $ticket->histories()->forceCreate([
             'user_id' => $requester->id,
@@ -117,6 +104,8 @@ class OpenTicket
                         'first_response_due_at' => $ticket->first_response_due_at->toIso8601String(),
                         'resolution_due_at' => $ticket->resolution_due_at->toIso8601String(),
                     ],
+                // Dados da origem; podem sobrepor o status (o chamado do chat nasce Aberto no histórico).
+                ...$extra,
             ],
             'created_at' => $ticket->created_at,
         ]);

@@ -31,6 +31,7 @@ enum AdminEvent: string
     case SlaPolicyUpdated = 'sla_policy_updated';
     case SlaPolicyDeactivated = 'sla_policy_deactivated';
     case SlaPolicyActivated = 'sla_policy_activated';
+    case ChatCapacityUpdated = 'chat_capacity_updated';
 
     public function label(): string
     {
@@ -54,6 +55,7 @@ enum AdminEvent: string
             self::SlaPolicyUpdated => 'Metas da política de SLA alteradas',
             self::SlaPolicyDeactivated => 'Política de SLA inativada',
             self::SlaPolicyActivated => 'Política de SLA ativada',
+            self::ChatCapacityUpdated => 'Capacidade no chat alterada',
         };
     }
 }

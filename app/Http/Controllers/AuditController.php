@@ -62,6 +62,7 @@ class AuditController extends Controller
         'is_system' => ['Papel do sistema', 'yesno'],
         'added' => ['Permissões concedidas', 'list'],
         'removed' => ['Permissões retiradas', 'list'],
+        'chat_max_sessions' => ['Capacidade no chat', 'text'],
     ];
 
     /**

@@ -383,6 +383,7 @@ test('public registration cannot choose a role or status, only the department li
     expect($user->role_id)->toBe(roleId('requester'))
         ->and($user->department_id)->toBe($this->department->id)
         ->and($user->is_active)->toBeTrue()
-        ->and($user->effectivePermissions())->toBe([])
+        // Só as permissões do chat do Solicitante (RF-26); nenhuma administrativa ou de atendimento.
+        ->and(collect($user->effectivePermissions())->sort()->values()->all())->toBe(['chat.request', 'chat.send_message'])
         ->and(AuditLog::count())->toBe(0);
 });

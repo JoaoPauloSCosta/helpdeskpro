@@ -35,6 +35,26 @@ class SlaClock
     }
 
     /**
+     * Aplica ao chamado novo a política ativa da prioridade, com os prazos contados a partir de `$from`
+     * (RF-05, D-C12): a abertura comum usa o instante atual; o chamado gerado pelo chat, a entrada na fila.
+     * Sem política, tudo fica nulo (D2). Política e metas ficam copiadas no chamado.
+     */
+    public static function applyPolicy(Ticket $ticket, CarbonInterface $from): void
+    {
+        $policy = self::policyFor($ticket->priority);
+
+        $ticket->forceFill([
+            'created_at' => $from,
+            'updated_at' => $from,
+            'sla_policy_id' => $policy?->id,
+            'sla_first_response_minutes' => $policy?->first_response_minutes,
+            'sla_resolution_minutes' => $policy?->resolution_minutes,
+            'first_response_due_at' => $policy ? $from->copy()->addMinutes($policy->first_response_minutes) : null,
+            'resolution_due_at' => $policy ? $from->copy()->addMinutes($policy->resolution_minutes) : null,
+        ]);
+    }
+
+    /**
      * Segundos de resolução já consumidos, sem as pausas. Nunca negativo; pode passar da meta
      * quando o chamado está vencido. `null` se o chamado não tem prazo ou meta aplicada.
      */

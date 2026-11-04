@@ -295,8 +295,9 @@ test('renaming does not grant any access by name', function () {
 
     patchRole($this->admin, $custom, roleEditData($custom, ['name' => 'Super administrador']))->assertSessionHasNoErrors();
 
+    // O Solicitante continua só com as permissões do chat (RF-26).
     expect($guest->fresh()->effectivePermissions())->toBe([])
-        ->and($requesterRole->fresh()->permissions()->count())->toBe(0);
+        ->and($requesterRole->fresh()->permissions()->orderBy('slug')->pluck('slug')->all())->toBe(['chat.request', 'chat.send_message']);
 
     $this->actingAs($guest->fresh())->get('/admin/roles')->assertForbidden();
 });

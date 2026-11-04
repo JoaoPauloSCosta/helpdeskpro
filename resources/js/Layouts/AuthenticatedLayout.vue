@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
+import ChatLauncher from '@/Components/ChatLauncher.vue';
 import Header from '@/Components/Header.vue';
 import Sidebar from '@/Components/Sidebar.vue';
 import ToastContainer from '@/Components/ToastContainer.vue';
@@ -92,6 +93,7 @@ watch(menuOpen, async (open) => {
                 </main>
             </div>
         </div>
+        <ChatLauncher />
         <ToastContainer />
     </div>
 </template>

@@ -34,10 +34,21 @@ class RolesAndPermissionsSeeder extends Seeder
         'categories.manage' => 'Gerenciar categorias',
         'roles.manage' => 'Gerenciar papéis e permissões',
         'sla.manage' => 'Gerenciar políticas de SLA',
+        // Chat (RF-26 a RF-36). Mesmos textos da migration 2026_11_04_000005_add_chat_permissions.
+        'chat.request' => 'Solicitar atendimento via chat',
+        'chat.send_message' => 'Enviar mensagens em atendimento via chat',
+        'chat.view_queue' => 'Visualizar a fila do chat',
+        'chat.manage_availability' => 'Alterar a própria disponibilidade no chat',
+        'chat.accept_next' => 'Assumir o próximo atendimento via chat',
+        'chat.close' => 'Encerrar atendimento via chat',
+        'chat.transfer' => 'Transferir atendimento via chat',
+        'chat.view_history' => 'Consultar o histórico de atendimentos via chat',
+        'chat.manage_capacity' => 'Configurar a capacidade dos técnicos no chat',
+        'chat.view_metrics' => 'Consultar os indicadores do chat',
     ];
 
     public const ROLES = [
-        'requester' => ['Solicitante', []],
+        'requester' => ['Solicitante', ['chat.request', 'chat.send_message']],
         'technician' => ['Técnico', [
             'tickets.self_assign',
             'tickets.change_status',
@@ -47,6 +58,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'tickets.view_internal_notes',
             'tickets.add_internal_note',
             'audit.view',
+            'chat.send_message',
+            'chat.view_queue',
+            'chat.manage_availability',
+            'chat.accept_next',
+            'chat.close',
+            'chat.transfer',
         ]],
         'manager' => ['Gestor', [
             'tickets.view_all_departments',
@@ -61,6 +78,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'tickets.add_internal_note',
             'audit.view',
             'reports.view_performance',
+            'chat.view_queue',
+            'chat.transfer',
+            'chat.view_history',
+            'chat.manage_capacity',
+            'chat.view_metrics',
         ]],
         'admin' => ['Administrador', [
             'tickets.view_all_departments',
@@ -74,6 +96,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'categories.manage',
             'roles.manage',
             'sla.manage',
+            'chat.view_history',
+            'chat.view_metrics',
         ]],
     ];
 

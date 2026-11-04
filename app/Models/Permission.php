@@ -20,6 +20,10 @@ class Permission extends Model
         'sla.manage',
         'audit.view',
         'reports.view_performance',
+        // `chat.manage_capacity` fica de fora: é operacional (como `tickets.assign`) e o Administrador, que não a
+        // tem, precisa continuar atribuindo o papel Gestor.
+        'chat.view_history',
+        'chat.view_metrics',
     ];
 
     /**
@@ -36,6 +40,7 @@ class Permission extends Model
         'categories' => 'Categorias',
         'roles' => 'Papéis e permissões',
         'sla' => 'Políticas de SLA',
+        'chat' => 'Chat',
     ];
 
     public const OTHER_GROUP = 'other';

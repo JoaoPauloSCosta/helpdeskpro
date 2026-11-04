@@ -2,10 +2,20 @@
 
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ChatAgentController;
+use App\Http\Controllers\ChatAgentsAdminController;
+use App\Http\Controllers\ChatCapacityController;
+use App\Http\Controllers\ChatHistoryController;
+use App\Http\Controllers\ChatMessageController;
+use App\Http\Controllers\ChatMetricsController;
+use App\Http\Controllers\ChatPageController;
+use App\Http\Controllers\ChatPreferenceController;
+use App\Http\Controllers\ChatQueueController;
+use App\Http\Controllers\ChatSessionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
-use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PerformanceController;
+use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RolePermissionController;
@@ -13,6 +23,7 @@ use App\Http\Controllers\SlaPolicyController;
 use App\Http\Controllers\TicketAssignmentController;
 use App\Http\Controllers\TicketAttachmentController;
 use App\Http\Controllers\TicketAuditController;
+use App\Http\Controllers\TicketChatController;
 use App\Http\Controllers\TicketClosingController;
 use App\Http\Controllers\TicketCommentController;
 use App\Http\Controllers\TicketCommentVersionController;
@@ -26,6 +37,7 @@ use App\Http\Controllers\TicketSelfAssignmentController;
 use App\Http\Controllers\TicketSlaHistoryController;
 use App\Http\Controllers\TicketStatusController;
 use App\Http\Controllers\UserController;
+use App\Http\Middleware\EnsureChatEnabled;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -72,6 +84,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Somente leitura (CHA-13): períodos de pausa e eventos que afetam o SLA do chamado.
     Route::get('/tickets/{ticket}/sla-history', [TicketSlaHistoryController::class, 'index'])->name('tickets.sla-history.index');
     // Somente leitura (CHA-14): eventos de auditoria do chamado, com `audit.view`.
+    Route::get('/tickets/{ticket}/chat', [TicketChatController::class, 'show'])->name('tickets.chat.show');
     Route::get('/tickets/{ticket}/audit', [TicketAuditController::class, 'index'])->name('tickets.audit.index');
 
     // Administração (ADM-01 a ADM-03): autorizada por `users.manage` no controller e nos form requests.
@@ -124,6 +137,42 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/sla-policies/{policy}', [SlaPolicyController::class, 'show'])->whereNumber('policy')->name('sla-policies.show');
     Route::get('/sla-policies/{policy}/edit', [SlaPolicyController::class, 'edit'])->whereNumber('policy')->name('sla-policies.edit');
     Route::patch('/sla-policies/{policy}', [SlaPolicyController::class, 'update'])->whereNumber('policy')->name('sla-policies.update');
+});
+
+// Chat (RF-26 a RF-36, docs/chat): só existe com CHAT_ENABLED=true; desligado, responde 404 a quem está logado.
+Route::middleware([EnsureChatEnabled::class, 'auth', 'verified'])->prefix('chat')->name('chat.')->group(function () {
+    // Telas (Inertia): CHAT-01 a CHAT-03 para o solicitante e CHAT-04/05 para a equipe.
+    Route::get('/', [ChatPageController::class, 'index'])->name('index');
+    Route::get('/console', [ChatPageController::class, 'console'])->name('console');
+    Route::get('/console/state', [ChatPageController::class, 'consoleState'])->name('console.state');
+    // RF-28: estado, disponibilidade manual e presença do próprio técnico (JSON, para o painel CHAT-04).
+    Route::get('/agent', [ChatAgentController::class, 'show'])->name('agent.show');
+    Route::put('/agent/availability', [ChatAgentController::class, 'updateAvailability'])->name('agent.availability.update');
+    Route::post('/agent/heartbeat', [ChatAgentController::class, 'heartbeat'])->middleware('throttle:20,1')->name('agent.heartbeat');
+    // RF-26, RF-27, RF-32: pedido, estado (com a posição calculada no servidor) e cancelamento, em JSON.
+    // Sessões de outras pessoas respondem 404.
+    Route::post('/sessions', [ChatSessionController::class, 'store'])->middleware('throttle:6,1')->name('sessions.store');
+    Route::get('/current', [ChatSessionController::class, 'current'])->name('sessions.current');
+    Route::get('/sessions/{session}', [ChatSessionController::class, 'show'])->whereNumber('session')->name('sessions.show');
+    Route::post('/sessions/{session}/cancellation', [ChatSessionController::class, 'cancel'])->whereNumber('session')->name('sessions.cancellation.store');
+    // RF-34: encerramento pelo técnico responsável; gera o chamado (idempotente).
+    Route::post('/sessions/{session}/closure', [ChatSessionController::class, 'end'])->whereNumber('session')->middleware('throttle:20,1')->name('sessions.closure.store');
+    // RF-30, RF-33: mensagens (leitura incremental com `after_id`, envio idempotente por `client_id`) e lidas.
+    Route::get('/sessions/{session}/messages', [ChatMessageController::class, 'index'])->whereNumber('session')->name('sessions.messages.index');
+    Route::post('/sessions/{session}/messages', [ChatMessageController::class, 'store'])->whereNumber('session')->middleware('throttle:30,1')->name('sessions.messages.store');
+    Route::post('/sessions/{session}/read', [ChatMessageController::class, 'read'])->whereNumber('session')->name('sessions.read');
+    // RF-31: preferência de som do próprio usuário.
+    Route::put('/preferences', [ChatPreferenceController::class, 'update'])->name('preferences.update');
+    // RF-27, RF-29: fila operacional e "Atender próximo".
+    Route::get('/queue', [ChatQueueController::class, 'index'])->name('queue.index');
+    Route::post('/queue/next', [ChatQueueController::class, 'next'])->name('queue.next');
+    // RF-36: capacidade de um técnico, com `chat.manage_capacity`; o técnico é buscado depois da autorização.
+    Route::get('/admin/agents', [ChatAgentsAdminController::class, 'index'])->name('admin.agents.index');
+    // RF-36: histórico (CHAT-07) e indicadores (CHAT-08), somente leitura.
+    Route::get('/history', [ChatHistoryController::class, 'index'])->name('history.index');
+    Route::get('/history/{session}', [ChatHistoryController::class, 'show'])->whereNumber('session')->name('history.show');
+    Route::get('/metrics', [ChatMetricsController::class, 'index'])->name('metrics.index');
+    Route::patch('/admin/agents/{user}', [ChatCapacityController::class, 'update'])->whereNumber('user')->name('admin.agents.update');
 });
 
 Route::middleware('auth')->group(function () {

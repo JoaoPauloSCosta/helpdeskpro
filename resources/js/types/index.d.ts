@@ -3,6 +3,8 @@ export interface User {
     name: string;
     email: string;
     email_verified_at?: string;
+    /** Preferência de som do chat (RF-31). */
+    chat_sound_enabled?: boolean;
 }
 
 /** LengthAwarePaginator do Laravel serializado pelo Inertia. */
@@ -24,6 +26,8 @@ export type PageProps<
         /** Slugs das permissões efetivas; só controla a exibição da interface. */
         permissions: string[];
     };
+    /** Parâmetros do chat; nulo com o módulo desligado. */
+    chat: { pollInterval: number; heartbeatInterval: number; messageMaxLength: number; subjectMaxLength: number } | null;
     flash: {
         /** Identificador do chamado recém-aberto (CHA-02). */
         ticketCreated: string | null;
