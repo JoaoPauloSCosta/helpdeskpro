@@ -10,6 +10,7 @@
  *   request <solicitante>      pedido de atendimento
  *   cancel <solicitante> <sessão>
  *   end <técnico> <sessão> <categoria>  encerramento + chamado (Etapa 8); saída "ok:<número do chamado>"
+ *   transfer <técnico atual> <sessão> <destino>  transferência (RF-35); saída "ok" ou "conflict"
  * Saída: "ok" ou "ok:<id da sessão>", ou o nome curto da exceção (capacity, unavailable, empty, conflict).
  */
 
@@ -22,6 +23,7 @@ use App\Actions\Chat\ChatSessionConflict;
 use App\Actions\Chat\EndChatSession;
 use App\Actions\Chat\LockAgentForAssignment;
 use App\Actions\Chat\RequestChatSession;
+use App\Actions\Chat\TransferChatSession;
 use App\Enums\ChatSessionStatus;
 use App\Models\ChatSession;
 use App\Models\User;
@@ -59,6 +61,7 @@ try {
         'accept' => 'ok:'.app(AcceptNextChatSession::class)(User::findOrFail($args[0]))->id,
         'request' => 'ok:'.app(RequestChatSession::class)(User::findOrFail($args[0]), 'Concorrência')[0]->id,
         'cancel' => 'ok:'.app(CancelChatSession::class)(User::findOrFail($args[0]), ChatSession::findOrFail($args[1]))->id,
+        'transfer' => 'ok:'.app(TransferChatSession::class)(User::findOrFail($args[0]), ChatSession::findOrFail($args[1]), (int) $args[2])->id,
         'end' => 'ok:'.app(EndChatSession::class)(User::findOrFail($args[0]), ChatSession::findOrFail($args[1]), [
             'outcome' => 'resolved',
             'title' => 'Concorrência',

@@ -19,6 +19,7 @@ import { useChatSound } from '@/composables/useChatSound';
 import { useToast } from '@/composables/useToast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CloseChatModal from '@/Pages/Chat/Partials/CloseChatModal.vue';
+import TransferChatModal from '@/Pages/Chat/Partials/TransferChatModal.vue';
 import { elapsed, formatTime, type AgentState, type ChatClosureForm, type ChatMessage, type ConsoleState } from '@/lib/chat';
 import type { PageProps } from '@/types';
 
@@ -39,6 +40,12 @@ const accepting = ref(false);
 const togglingAvailability = ref(false);
 const now = ref(Date.now());
 const closing = ref(false);
+const transferring = ref(false);
+/** Sessão do modal de transferência: mantida depois de sair da lista, para o modal fechar com a animação. */
+const transferSession = ref<{ id: number; subject: string }>({ id: 0, subject: '' });
+watch(transferring, (open) => {
+    if (open && selected.value) transferSession.value = { id: selected.value.id, subject: selected.value.subject };
+});
 
 const selected = computed(() => state.value.sessions.find((session) => session.id === selectedId.value) ?? null);
 const conversation = useChatConversation(selectedId, userId);
@@ -308,7 +315,10 @@ const acceptNext = async () => {
                                     <p class="truncate text-sm text-neutral-600">{{ selected.subject }}</p>
                                 </div>
                             </div>
-                            <Button v-if="closure && can('chat.close')" variant="secondary" size="sm" @click="closing = true">Encerrar atendimento</Button>
+                            <div class="flex shrink-0 gap-2">
+                                <Button v-if="can('chat.transfer')" variant="secondary" size="sm" @click="transferring = true">Transferir</Button>
+                                <Button v-if="closure && can('chat.close')" variant="secondary" size="sm" @click="closing = true">Encerrar atendimento</Button>
+                            </div>
                         </template>
                         <div class="h-[70vh] min-h-[26rem]">
                             <ChatConversation
@@ -331,6 +341,7 @@ const acceptNext = async () => {
         </div>
 
         <!-- Fica fora do cartão da conversa: ao encerrar, a sessão sai da lista e o modal continua mostrando o chamado gerado -->
+        <TransferChatModal :show="transferring" :session="transferSession" @close="transferring = false" @transferred="onEnded" />
         <CloseChatModal v-if="closure" :show="closing" :session="closingSession ?? { id: 0, subject: '' }" :form="closure" @close="closing = false" @ended="onEnded" />
     </AuthenticatedLayout>
 </template>

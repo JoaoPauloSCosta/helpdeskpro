@@ -140,3 +140,25 @@ test('closing the same session many times at once creates exactly one ticket', f
             ->and($session->ticket->histories()->count())->toBe(3);
     }
 });
+
+test('simultaneous transfers never exceed the target capacity', function () {
+    $from = onDutyTechnician(max: 5);
+    $to = onDutyTechnician(max: 2);
+    $sessions = ChatSession::factory()->active($from)->count(4)->create();
+
+    $outputs = runTogether($sessions->map(fn (ChatSession $s) => ['transfer', $from->id, $s->id, $to->id])->all());
+
+    expect(count(succeeded($outputs)))->toBe(2, implode(' | ', $outputs))
+        ->and(ChatSession::where('technician_id', $to->id)->where('status', ChatSessionStatus::Active)->count())->toBe(2);
+});
+
+test('the same session transferred to two technicians at once changes hands once', function () {
+    $from = onDutyTechnician();
+    [$a, $b] = [onDutyTechnician(), onDutyTechnician()];
+    $session = ChatSession::factory()->active($from)->create();
+
+    $outputs = runTogether([['transfer', $from->id, $session->id, $a->id], ['transfer', $from->id, $session->id, $b->id]]);
+
+    expect(count(succeeded($outputs)))->toBe(1, implode(' | ', $outputs))
+        ->and($session->events()->where('event_type', 'transferred')->count())->toBe(1);
+});

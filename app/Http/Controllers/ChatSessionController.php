@@ -7,8 +7,10 @@ use App\Actions\Chat\ChatSessionConflict;
 use App\Actions\Chat\EndChatSession;
 use App\Actions\Chat\NoChatTechnicianAvailable;
 use App\Actions\Chat\RequestChatSession;
+use App\Actions\Chat\TransferChatSession;
 use App\Http\Requests\Chat\EndChatSessionRequest;
 use App\Http\Requests\Chat\StoreChatSessionRequest;
+use App\Models\ChatAgent;
 use App\Models\ChatSession;
 use App\Support\ChatSessionState;
 use Illuminate\Http\JsonResponse;
@@ -74,6 +76,35 @@ class ChatSessionController extends Controller
         }
 
         return response()->json(ChatSessionState::for($ended, $request->user()));
+    }
+
+    /** RF-35: técnicos de plantão e com vaga para receber o atendimento (nome e ocupação, nada mais). */
+    public function transferTargets(Request $request, int $session): JsonResponse
+    {
+        Gate::authorize('transfer', $chat = $this->visible($request, $session));
+
+        $targets = ChatAgent::onDuty()->with('user:id,name')
+            ->where('user_id', '!=', $chat->technician_id)
+            ->get()
+            ->map(fn (ChatAgent $agent) => ['id' => $agent->user_id, 'name' => $agent->user->name, 'active_sessions' => $agent->activeSessionsCount(), 'max_sessions' => $agent->max_sessions])
+            ->filter(fn (array $row) => $row['active_sessions'] < $row['max_sessions'])
+            ->sortBy('name')->values();
+
+        return response()->json(['targets' => $targets]);
+    }
+
+    /** 409 com o motivo quando o destino não pode receber ou o atendimento mudou; 403 sem permissão. */
+    public function transfer(Request $request, int $session, TransferChatSession $transfer): JsonResponse
+    {
+        $data = $request->validate(['technician_id' => ['required', 'integer']]);
+
+        try {
+            $transferred = $transfer($request->user(), $this->visible($request, $session), $data['technician_id']);
+        } catch (ChatSessionConflict $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json(ChatSessionState::for($transferred, $request->user()));
     }
 
     private function visible(Request $request, int $id): ChatSession

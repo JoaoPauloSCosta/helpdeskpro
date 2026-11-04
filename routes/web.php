@@ -157,6 +157,9 @@ Route::middleware([EnsureChatEnabled::class, 'auth', 'verified'])->prefix('chat'
     Route::post('/sessions/{session}/cancellation', [ChatSessionController::class, 'cancel'])->whereNumber('session')->name('sessions.cancellation.store');
     // RF-34: encerramento pelo técnico responsável; gera o chamado (idempotente).
     Route::post('/sessions/{session}/closure', [ChatSessionController::class, 'end'])->whereNumber('session')->middleware('throttle:20,1')->name('sessions.closure.store');
+    // RF-35: transferência para outro técnico de plantão com vaga.
+    Route::get('/sessions/{session}/transfer-targets', [ChatSessionController::class, 'transferTargets'])->whereNumber('session')->name('sessions.transfer.targets');
+    Route::post('/sessions/{session}/transfer', [ChatSessionController::class, 'transfer'])->whereNumber('session')->middleware('throttle:20,1')->name('sessions.transfer.store');
     // RF-30, RF-33: mensagens (leitura incremental com `after_id`, envio idempotente por `client_id`) e lidas.
     Route::get('/sessions/{session}/messages', [ChatMessageController::class, 'index'])->whereNumber('session')->name('sessions.messages.index');
     Route::post('/sessions/{session}/messages', [ChatMessageController::class, 'store'])->whereNumber('session')->middleware('throttle:30,1')->name('sessions.messages.store');
