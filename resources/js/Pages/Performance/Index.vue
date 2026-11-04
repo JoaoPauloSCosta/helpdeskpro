@@ -13,11 +13,11 @@ import PageHeader from '@/Components/PageHeader.vue';
 import Pagination from '@/Components/Pagination.vue';
 import Select from '@/Components/Select.vue';
 import Spinner from '@/Components/Spinner.vue';
-import StatCard from '@/Components/StatCard.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { useListing } from '@/composables/useListing';
+import EvolutionChart from '@/Pages/Performance/Partials/EvolutionChart.vue';
 import {
     percent,
     performanceFilterKeys,
@@ -77,10 +77,6 @@ const periodLabel = computed(() => {
     return props.period.is_default ? `Últimos 30 dias (${range})` : range;
 });
 
-const granularityLabel = computed(
-    () => ({ day: 'por dia', week: 'por semana', month: 'por mês' })[props.period.granularity],
-);
-
 /* ---------- Indicadores ---------- */
 
 const number = (value: number) => value.toLocaleString('pt-BR');
@@ -124,12 +120,14 @@ const statusTotal = computed(() => props.report?.statuses.reduce((sum, item) => 
 const technicianAverage = (stat: { average_seconds: number | null }) =>
     stat.average_seconds === null ? '—' : formatDuration(stat.average_seconds);
 
-/** Início de cada intervalo da evolução, no formato da granularidade. */
-const pointLabel = (start: string) => {
-    const [year, month, day] = start.split('-');
-
-    return props.period.granularity === 'month' ? `${month}/${year}` : props.period.granularity === 'week' ? `Semana de ${day}/${month}` : `${day}/${month}`;
-};
+/** Demais indicadores ao lado do SLA: volume em cima (3 colunas), tempos embaixo (2 colunas). */
+const kpis = computed(() => [
+    { label: 'Chamados atendidos', value: number(props.report!.totals.attended), hint: 'Abertos no período, com responsável ou não.', span: 'col-span-6 sm:col-span-2' },
+    { label: 'Chamados resolvidos', value: number(props.report!.totals.resolved), hint: 'Resolvidos no período (hoje resolvidos ou encerrados).', span: 'col-span-6 sm:col-span-2' },
+    { label: 'Violações de SLA', value: violations.value.value, hint: violations.value.hint, span: 'col-span-6 sm:col-span-2' },
+    { label: 'Tempo médio de primeira resposta', value: firstResponse.value.value, hint: firstResponse.value.hint, span: 'col-span-6 sm:col-span-3' },
+    { label: 'Tempo médio de resolução', value: resolution.value.value, hint: resolution.value.hint, span: 'col-span-6 sm:col-span-3' },
+]);
 </script>
 
 <template>
@@ -224,23 +222,39 @@ const pointLabel = (start: string) => {
                 </Card>
 
                 <template v-else>
-                    <section aria-labelledby="perf-kpis">
+                    <section aria-labelledby="perf-kpis" class="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
                         <h2 id="perf-kpis" class="sr-only">Indicadores do período</h2>
-                        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                            <StatCard icon="inbox" label="Chamados atendidos" :value="number(report.totals.attended)" hint="Abertos no período, com responsável ou não." />
-                            <StatCard icon="check-circle" label="Chamados resolvidos" :value="number(report.totals.resolved)" hint="Resolvidos no período (hoje resolvidos ou encerrados)." />
-                            <StatCard icon="shield-check" label="Cumprimento do SLA" :value="compliance.value" :hint="compliance.hint" />
-                            <StatCard icon="clock" label="Violações de SLA" :value="violations.value" :hint="violations.hint" />
-                            <StatCard icon="clock" label="Tempo médio de primeira resposta" :value="firstResponse.value" :hint="firstResponse.hint" />
-                            <StatCard icon="check-circle" label="Tempo médio de resolução" :value="resolution.value" :hint="resolution.hint" />
+                        <div class="grid lg:grid-cols-3">
+                            <div class="border-b border-neutral-200 p-4 sm:p-6 lg:border-b-0 lg:border-r">
+                                <p class="flex items-center gap-2 text-sm font-medium text-neutral-600">
+                                    <Icon name="shield-check" :size="16" class="text-neutral-400" /> Cumprimento do SLA
+                                </p>
+                                <p class="mt-2 text-5xl font-semibold tracking-tight tabular-nums text-neutral-900">{{ compliance.value }}</p>
+                                <div v-if="report.totals.tracked" class="mt-4 h-2 rounded-full bg-danger-bg" aria-hidden="true">
+                                    <div class="h-2 rounded-full bg-success" :style="{ width: `${report.totals.compliance_rate ?? 0}%` }" />
+                                </div>
+                                <p class="mt-3 text-sm text-neutral-600">{{ compliance.hint }}</p>
+                            </div>
+
+                            <dl class="grid grid-cols-6 gap-px bg-neutral-200 lg:col-span-2">
+                                <div v-for="kpi in kpis" :key="kpi.label" class="bg-white p-4 sm:p-6" :class="kpi.span">
+                                    <dt class="text-sm text-neutral-600">{{ kpi.label }}</dt>
+                                    <dd class="mt-1 text-2xl font-semibold tabular-nums text-neutral-900">{{ kpi.value }}</dd>
+                                    <dd class="mt-1 text-xs text-neutral-500">{{ kpi.hint }}</dd>
+                                </div>
+                            </dl>
                         </div>
                     </section>
 
-                    <Card title="Chamados atendidos por status atual">
-                        <BarList :items="report.statuses" :total="statusTotal">
-                            <template #label="{ item }"><StatusBadge :status="item.label as TicketStatus" /></template>
-                        </BarList>
-                    </Card>
+                    <div class="grid gap-6 lg:grid-cols-3">
+                        <EvolutionChart class="lg:col-span-2" :points="report.evolution" :granularity="period.granularity" />
+
+                        <Card title="Por status atual">
+                            <BarList :items="report.statuses" :total="statusTotal">
+                                <template #label="{ item }"><StatusBadge :status="item.label as TicketStatus" /></template>
+                            </BarList>
+                        </Card>
+                    </div>
 
                     <section aria-labelledby="perf-techs" class="space-y-3">
                         <h2 id="perf-techs" class="text-lg font-semibold text-neutral-900">Por técnico</h2>
@@ -248,35 +262,45 @@ const pointLabel = (start: string) => {
                             <template #head>
                                 <tr class="whitespace-nowrap">
                                     <th scope="col">Técnico</th>
-                                    <th scope="col">Atendidos</th>
-                                    <th scope="col">Em atendimento</th>
-                                    <th scope="col">Resolvidos</th>
-                                    <th scope="col">Com SLA apurado</th>
-                                    <th scope="col">Dentro do SLA</th>
-                                    <th scope="col">Violados</th>
-                                    <th scope="col">Violações</th>
-                                    <th scope="col">Cumprimento</th>
-                                    <th scope="col">1ª resposta (média)</th>
-                                    <th scope="col">Resolução (média)</th>
+                                    <th scope="col" class="!text-right">Atendidos</th>
+                                    <th scope="col" class="!text-right">Em atendimento</th>
+                                    <th scope="col" class="!text-right">Resolvidos</th>
+                                    <th scope="col">Cumprimento do SLA</th>
+                                    <th scope="col" class="!text-right">Violações</th>
+                                    <th scope="col" class="!text-right">1ª resposta (média)</th>
+                                    <th scope="col" class="!text-right">Resolução (média)</th>
                                 </tr>
                             </template>
 
                             <tr v-for="row in report.technicians.data" :key="row.id ?? 'none'">
-                                <td class="font-medium">{{ row.name }}</td>
-                                <td class="tabular-nums">{{ number(row.attended) }}</td>
-                                <td class="tabular-nums">{{ number(row.by_status['in_progress'] ?? 0) }}</td>
-                                <td class="tabular-nums">{{ number(row.resolved) }}</td>
-                                <td class="tabular-nums">{{ number(row.tracked) }}</td>
-                                <td class="tabular-nums">{{ number(row.within_sla) }}</td>
-                                <td class="tabular-nums">{{ number(row.violated_tickets) }}</td>
-                                <td class="tabular-nums">{{ number(row.violations) }}</td>
-                                <td class="tabular-nums">{{ percent(row.compliance_rate) }}</td>
-                                <td class="tabular-nums">{{ technicianAverage(row.first_response) }}</td>
-                                <td class="tabular-nums">{{ technicianAverage(row.resolution) }}</td>
+                                <td class="font-medium" :class="row.id === null && 'text-neutral-600'">{{ row.name }}</td>
+                                <td class="text-right tabular-nums">{{ number(row.attended) }}</td>
+                                <td class="text-right tabular-nums">{{ number(row.by_status['in_progress'] ?? 0) }}</td>
+                                <td class="text-right tabular-nums">{{ number(row.resolved) }}</td>
+                                <td class="min-w-44">
+                                    <template v-if="row.tracked">
+                                        <span class="flex items-center gap-3">
+                                            <span class="w-12 font-medium tabular-nums">{{ percent(row.compliance_rate) }}</span>
+                                            <span class="h-1.5 flex-1 rounded-full bg-danger-bg" aria-hidden="true">
+                                                <span class="block h-1.5 rounded-full bg-success" :style="{ width: `${row.compliance_rate ?? 0}%` }" />
+                                            </span>
+                                        </span>
+                                        <span class="mt-0.5 block text-xs text-neutral-500">{{ number(row.within_sla) }} de {{ number(row.tracked) }} no prazo</span>
+                                    </template>
+                                    <span v-else class="text-neutral-500">— <span class="text-xs">sem SLA apurado</span></span>
+                                </td>
+                                <td class="text-right tabular-nums">
+                                    {{ number(row.violations) }}
+                                    <span v-if="row.violated_tickets" class="block text-xs text-neutral-500">
+                                        em {{ plural(row.violated_tickets, 'chamado', 'chamados') }}
+                                    </span>
+                                </td>
+                                <td class="text-right tabular-nums">{{ technicianAverage(row.first_response) }}</td>
+                                <td class="text-right tabular-nums">{{ technicianAverage(row.resolution) }}</td>
                             </tr>
 
                             <tr v-if="!report.technicians.data.length">
-                                <td colspan="11" class="text-center text-neutral-600">Nenhum técnico com chamados neste período.</td>
+                                <td colspan="8" class="text-center text-neutral-600">Nenhum técnico com chamados neste período.</td>
                             </tr>
 
                             <template #footer>
@@ -293,30 +317,6 @@ const pointLabel = (start: string) => {
                             técnico que registrou a resolução mais recente. Cada chamado conta uma vez. "—" indica que não há dado
                             para calcular, não zero. Violações anteriores a uma reabertura continuam contadas.
                         </p>
-                    </section>
-
-                    <section aria-labelledby="perf-evolution" class="space-y-3">
-                        <h2 id="perf-evolution" class="text-lg font-semibold text-neutral-900">
-                            Evolução no período <span class="text-sm font-normal text-neutral-500">({{ granularityLabel }})</span>
-                        </h2>
-                        <DataTable>
-                            <template #head>
-                                <tr class="whitespace-nowrap">
-                                    <th scope="col">Intervalo</th>
-                                    <th scope="col">Abertos</th>
-                                    <th scope="col">Resolvidos</th>
-                                    <th scope="col">Violados</th>
-                                    <th scope="col">Cumprimento do SLA</th>
-                                </tr>
-                            </template>
-                            <tr v-for="point in report.evolution" :key="point.start">
-                                <td>{{ pointLabel(point.start) }}</td>
-                                <td class="tabular-nums">{{ number(point.opened) }}</td>
-                                <td class="tabular-nums">{{ number(point.resolved) }}</td>
-                                <td class="tabular-nums">{{ number(point.violated) }}</td>
-                                <td class="tabular-nums">{{ percent(point.compliance) }}</td>
-                            </tr>
-                        </DataTable>
                     </section>
                 </template>
             </div>
