@@ -25,10 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Falta de permissão vira uma página Inertia neutra, sem detalhes internos (design-system.md, 6.5).
-        // Os demais erros só usam a página própria fora do ambiente local, para manter o debug do Laravel.
+        // 500 e 503 só usam a página própria fora do ambiente local, para manter o debug do Laravel.
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
-            $handled = app()->environment(['local', 'testing']) ? [403] : [403, 404, 500, 503];
+            $handled = app()->environment(['local', 'testing']) ? [403, 404] : [403, 404, 500, 503];
 
             if (! in_array($status, $handled, true) || $request->expectsJson() && ! $request->header('X-Inertia')) {
                 return $response;

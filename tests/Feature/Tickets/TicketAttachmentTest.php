@@ -388,7 +388,8 @@ test('a missing file on disk answers not found without exposing paths', function
 
     $response = $this->actingAs($this->requester)->get(downloadUrl($this->ticket, $public))->assertNotFound();
 
-    expect($response->getContent())->not->toContain('storage')->not->toContain($public->storage_path);
+    // A lista de rotas do Ziggy tem `storage/{path}` em toda página; o que não pode aparecer é a pasta do disco.
+    expect($response->getContent())->not->toMatch('#storage[\\\\/]+app#')->not->toContain($public->storage_path);
 });
 
 test('the attachments disk is private', function () {
