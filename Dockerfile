@@ -16,6 +16,13 @@ COPY --from=vendor /app/vendor ./vendor
 COPY vite.config.js tailwind.config.js postcss.config.js tsconfig.json ./
 COPY resources ./resources
 COPY public ./public
+# Endereço do Reverb visto pelo NAVEGADOR (fixado no build). Sem eles o tempo real não conecta e o chat cai na
+# consulta periódica. Veja docs/chat/12-producao.md.
+ARG VITE_REVERB_APP_KEY=
+ARG VITE_REVERB_HOST=
+ARG VITE_REVERB_PORT=
+ARG VITE_REVERB_SCHEME=
+ENV VITE_REVERB_APP_KEY=$VITE_REVERB_APP_KEY VITE_REVERB_HOST=$VITE_REVERB_HOST VITE_REVERB_PORT=$VITE_REVERB_PORT VITE_REVERB_SCHEME=$VITE_REVERB_SCHEME
 RUN npm run build
 
 # ---- 3. Imagem final (Apache + PHP) -----------------------------------------

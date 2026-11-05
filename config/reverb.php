@@ -82,7 +82,8 @@ return [
                     'scheme' => env('REVERB_SCHEME', 'https'),
                     'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
                 ],
-                'allowed_origins' => ['*'],
+                // Em produção, restrinja aos endereços do sistema (REVERB_ALLOWED_ORIGINS=helpdesk.exemplo.com.br,...).
+                'allowed_origins' => explode(',', (string) env('REVERB_ALLOWED_ORIGINS', '*')),
                 'ping_interval' => env('REVERB_APP_PING_INTERVAL', 60),
                 'activity_timeout' => env('REVERB_APP_ACTIVITY_TIMEOUT', 30),
                 'max_connections' => env('REVERB_APP_MAX_CONNECTIONS'),
