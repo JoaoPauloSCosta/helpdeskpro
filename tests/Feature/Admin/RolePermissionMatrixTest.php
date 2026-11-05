@@ -54,7 +54,7 @@ test('guests are redirected to login', function () {
     $this->get('/admin/roles/permissions')->assertRedirect('/login');
     $this->put("/admin/roles/{$this->technician->id}/permissions", ['permissions' => []])->assertRedirect('/login');
 
-    expect(roleSlugs($this->technician))->toHaveCount(8);
+    expect(roleSlugs($this->technician))->toHaveCount(14);
 });
 
 test('users without roles.manage can neither view nor change the matrix', function (string $slug) {
@@ -114,14 +114,14 @@ test('no role is selected automatically', function () {
             ->component('Admin/Roles/Permissions')
             ->where('selected', null)
             ->has('roles', 4)
-            ->where('roles.0', ['id' => Role::where('slug', 'admin')->value('id'), 'name' => 'Administrador', 'is_system' => true, 'permissions_count' => 11]));
+            ->where('roles.0', ['id' => Role::where('slug', 'admin')->value('id'), 'name' => 'Administrador', 'is_system' => true, 'permissions_count' => 13]));
 });
 
 test('the catalog matches the real permissions, grouped by module', function () {
     $response = $this->actingAs($this->admin)->get('/admin/roles/permissions')->assertOk();
     $catalog = collect($response->viewData('page')['props']['catalog']);
 
-    expect($catalog->pluck('key')->all())->toBe(['tickets', 'comments', 'audit', 'reports', 'users', 'departments', 'categories', 'roles', 'sla'])
+    expect($catalog->pluck('key')->all())->toBe(['tickets', 'comments', 'audit', 'reports', 'users', 'departments', 'categories', 'roles', 'sla', 'chat'])
         ->and($catalog->flatMap(fn ($group) => collect($group['permissions'])->pluck('slug'))->sort()->values()->all())
         ->toBe(Permission::orderBy('slug')->pluck('slug')->all())
         ->and($catalog->firstWhere('key', 'tickets')['label'])->toBe('Chamados');
@@ -163,10 +163,11 @@ test('the selected role shows exactly its persisted permissions', function () {
 });
 
 test('a role without permissions is shown as such', function () {
-    $requester = Role::where('slug', 'requester')->first();
+    // O Solicitante tem as permissões do chat; um papel personalizado novo não tem nenhuma.
+    $empty = Role::create(['name' => 'Visitante', 'slug' => 'visitante']);
 
     $this->actingAs($this->admin)
-        ->get("/admin/roles/permissions?role={$requester->id}")
+        ->get("/admin/roles/permissions?role={$empty->id}")
         ->assertInertia(fn (Assert $page) => $page->where('selected.permissions', [])->where('selected.can_manage', true));
 });
 
@@ -191,7 +192,7 @@ test('permissions can be added and removed in one save', function () {
 
     expect(roleSlugs($this->technician))->toContain('tickets.close')
         ->not->toContain('tickets.resolve')
-        ->toHaveCount(8);
+        ->toHaveCount(14);
 });
 
 test('the change takes effect on the users of the role', function () {
@@ -208,10 +209,10 @@ test('the change takes effect on the users of the role', function () {
 test('an empty list removes every permission of the role', function () {
     putMatrix($this->admin, $this->technician, matrixData($this->technician, []))
         ->assertSessionHasNoErrors()
-        ->assertSessionHas('success', 'Permissões do papel Técnico salvas: 0 adicionadas e 8 removidas.');
+        ->assertSessionHas('success', 'Permissões do papel Técnico salvas: 0 adicionadas e 14 removidas.');
 
     expect(roleSlugs($this->technician))->toBe([])
-        ->and(Permission::count())->toBe(20);
+        ->and(Permission::count())->toBe(30);
 });
 
 test('unchanged associations are kept as they were', function () {
@@ -249,7 +250,7 @@ test('no duplicate associations are created', function () {
     $pairs = DB::table('role_permissions')->get(['role_id', 'permission_id'])->map(fn ($row) => "{$row->role_id}-{$row->permission_id}");
 
     expect($pairs->count())->toBe($pairs->unique()->count())
-        ->and(roleSlugs($this->technician))->toHaveCount(9);
+        ->and(roleSlugs($this->technician))->toHaveCount(15);
 });
 
 test('saving without changes records nothing', function () {
@@ -300,7 +301,7 @@ test('extra fields cannot change the role or other roles', function () {
 
     expect(roleSlugs($this->technician))->toBe(['tickets.close'])
         ->and($this->technician->fresh()->only(['name', 'is_system']))->toBe(['name' => 'Técnico', 'is_system' => true])
-        ->and(roleSlugs($admin))->toHaveCount(11);
+        ->and(roleSlugs($admin))->toHaveCount(13);
 });
 
 /* ---------- Quem pode alterar a matriz ---------- */
@@ -348,7 +349,7 @@ test('without roles.manage nobody reaches the matrix', function () {
 
     $this->actingAs($operator)->get('/admin/roles/permissions')->assertForbidden();
     putMatrix($operator, $role, matrixData($role, ['tickets.close']))->assertForbidden();
-    expect(roleSlugs($role))->toBe([]);
+    expect(roleSlugs($role))->toBe(['chat.request', 'chat.send_message']);
 });
 
 test('operational permissions can be granted without holding them', function () {

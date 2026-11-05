@@ -34,8 +34,15 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 // Só controla a exibição da navegação; a autorização real fica no backend.
-                'permissions' => fn () => $request->user()?->effectivePermissions() ?? [],
+                'permissions' => fn () => $this->visiblePermissions($request),
             ],
+            // Parâmetros do chat para a tela; ausente com o módulo desligado.
+            'chat' => fn () => config('chat.enabled') ? [
+                'pollInterval' => config('chat.poll_interval'),
+                'heartbeatInterval' => config('chat.heartbeat_interval'),
+                'messageMaxLength' => config('chat.message_max_length'),
+                'subjectMaxLength' => config('chat.subject_max_length'),
+            ] : null,
             'flash' => [
                 // Identificador do chamado recém-aberto (CHA-02), exibido nos detalhes.
                 'ticketCreated' => fn () => $this->flashed($request, 'ticketCreated'),
@@ -45,6 +52,16 @@ class HandleInertiaRequests extends Middleware
                 'warning' => fn () => $this->flashed($request, 'warning'),
             ],
         ];
+    }
+
+    /** Com o módulo do chat desligado, as permissões `chat.*` não chegam à tela (menu e botões somem). */
+    private function visiblePermissions(Request $request): array
+    {
+        $permissions = $request->user()?->effectivePermissions() ?? [];
+
+        return config('chat.enabled')
+            ? $permissions
+            : array_values(array_filter($permissions, fn (string $slug) => ! str_starts_with($slug, 'chat.')));
     }
 
     private function flashed(Request $request, string $key): ?string

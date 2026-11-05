@@ -91,7 +91,7 @@ test('authorized users receive the catalog page', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('Admin/Permissions/Index')
             ->has('permissions.data', 15)
-            ->where('permissions.total', 20)
+            ->where('permissions.total', 30)
             ->where('permissions.per_page', 15)
             ->where('filters', [])
             ->where('sort', ['key' => 'name', 'direction' => 'asc'])
@@ -130,13 +130,13 @@ test('the summary covers the whole catalog, not the search or page', function ()
         ->get('/admin/permissions?module=sla')
         ->assertInertia(fn (Assert $page) => $page
             ->where('permissions.total', 1)
-            ->where('summary', ['total' => 20, 'modules' => 9, 'administrative' => 7]));
+            ->where('summary', ['total' => 30, 'modules' => 10, 'administrative' => 9]));
 });
 
 test('the module filter offers only modules present in the catalog', function () {
     $modules = fn () => collect(catalogProps($this->actingAs($this->admin)->get('/admin/permissions'))['options']['modules'])->pluck('value')->all();
 
-    expect($modules())->toBe(['tickets', 'comments', 'audit', 'reports', 'users', 'departments', 'categories', 'roles', 'sla']);
+    expect($modules())->toBe(['tickets', 'comments', 'audit', 'reports', 'users', 'departments', 'categories', 'roles', 'sla', 'chat']);
 
     Permission::create(['name' => 'Exportar relatórios', 'slug' => 'misc.export']);
 
@@ -147,7 +147,7 @@ test('an empty catalog is distinguishable from a search without results', functi
     $this->actingAs($this->admin)
         ->get('/admin/permissions?q=inexistente')
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->where('permissions.total', 0)->where('summary.total', 20)->where('filters', ['q' => 'inexistente']));
+        ->assertInertia(fn (Assert $page) => $page->where('permissions.total', 0)->where('summary.total', 30)->where('filters', ['q' => 'inexistente']));
 
     // Catálogo realmente vazio, com um operador cujo acesso não depende do papel.
     $operator = User::factory()->create();
@@ -274,7 +274,7 @@ test('pagination happens on the server and keeps filters and sorting', function 
     $second = catalogProps($this->actingAs($this->admin)->get('/admin/permissions?sort=slug&page=2'))['permissions'];
 
     expect($second['current_page'])->toBe(2)
-        ->and($second['data'])->toHaveCount(5)
+        ->and($second['data'])->toHaveCount(15)
         ->and($second['prev_page_url'])->toContain('sort=slug');
 });
 

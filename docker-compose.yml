@@ -2,6 +2,12 @@ x-app: &app
   build:
     context: .
     target: app
+    # Use `docker compose --env-file .env.docker build` para o front-end receber o endereço público do Reverb.
+    args:
+      VITE_REVERB_APP_KEY: ${VITE_REVERB_APP_KEY:-}
+      VITE_REVERB_HOST: ${VITE_REVERB_HOST:-}
+      VITE_REVERB_PORT: ${VITE_REVERB_PORT:-}
+      VITE_REVERB_SCHEME: ${VITE_REVERB_SCHEME:-}
   image: helpdesk-pro:latest
   env_file: .env.docker
   restart: unless-stopped
@@ -31,6 +37,22 @@ services:
     user: www-data
     entrypoint: ["entrypoint.sh"]
     command: ["sh", "-c", "while true; do php artisan schedule:run --no-interaction; sleep 60; done"]
+    depends_on:
+      - app
+
+  # Tempo real do chat (Laravel Reverb). O navegador conecta em ws://localhost:8081; a aplicação publica em reverb:8081.
+  reverb:
+    <<: *app
+    user: www-data
+    entrypoint: ["entrypoint.sh"]
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8081"]
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "php", "artisan", "chat:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       - app
 

@@ -9,6 +9,8 @@ export interface NavTarget {
     active?: string | string[];
     /** Permissão (ou todas as permissões) exigida para exibir o destino. A autorização real continua no backend. */
     permission?: string | string[];
+    /** Oculta o destino de quem tem qualquer uma destas permissões (evita entradas repetidas para a mesma rota). */
+    unless?: string | string[];
 }
 
 export interface NavItem extends NavTarget {
@@ -41,6 +43,14 @@ export const navigation: NavItem[] = [
     // Sem visão geral para o solicitante (RF-24): quem não consulta notas internas só usa os chamados.
     { label: 'Visão geral', icon: 'squares', route: 'dashboard', active: 'dashboard', permission: 'tickets.view_internal_notes' },
     { label: 'Chamados', icon: 'inbox', route: 'tickets.index', active: 'tickets.*' },
+    // Chat: só aparece com o módulo ligado (as permissões chat.* não chegam à tela se estiver desligado).
+    { label: 'Atendimento via chat', icon: 'chat', route: 'chat.index', active: 'chat.index', permission: 'chat.request' },
+    { label: 'Painel do chat', icon: 'headset', route: 'chat.console', active: 'chat.console*', permission: 'chat.view_queue' },
+    { label: 'Histórico do chat', icon: 'clock', route: 'chat.history.index', active: 'chat.history.*', permission: 'chat.view_history' },
+    { label: 'Meus atendimentos', icon: 'clock', route: 'chat.history.index', active: 'chat.history.*', permission: 'chat.request', unless: 'chat.view_history' },
+    { label: 'Meus atendimentos', icon: 'clock', route: 'chat.history.index', active: 'chat.history.*', permission: 'chat.accept_next', unless: ['chat.view_history', 'chat.request'] },
+    { label: 'Equipe do chat', icon: 'users', route: 'chat.admin.agents.index', active: 'chat.admin.*', permission: 'chat.manage_capacity' },
+    { label: 'Indicadores do chat', icon: 'chart-bar', route: 'chat.metrics.index', active: 'chat.metrics.*', permission: 'chat.view_metrics' },
     { label: 'Administração', icon: 'users', active: 'admin.*', sections: adminSections },
     { label: 'Desempenho', icon: 'chart-bar', route: 'performance.index', active: 'performance.*', permission: ['reports.view_performance', 'tickets.view_all_departments'] },
     { label: 'Políticas de SLA', icon: 'clock', route: 'sla-policies.index', active: 'sla-policies.*', permission: 'sla.manage' },
@@ -53,7 +63,10 @@ export const isCurrent = (target: NavTarget, fallback: string): boolean =>
     ([] as string[]).concat(target.active ?? fallback).some((pattern) => route().current(pattern));
 
 export const isAvailable = (target: NavTarget, permissions: string[]): boolean =>
-    !!target.route && route().has(target.route) && ([] as string[]).concat(target.permission ?? []).every((slug) => permissions.includes(slug));
+    !!target.route &&
+    route().has(target.route) &&
+    ([] as string[]).concat(target.permission ?? []).every((slug) => permissions.includes(slug)) &&
+    !([] as string[]).concat(target.unless ?? []).some((slug) => permissions.includes(slug));
 
 /** Página inicial da Administração para o usuário: a primeira seção disponível. */
 export const adminHomeHref = (permissions: string[]): string | null => {

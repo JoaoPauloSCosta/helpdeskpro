@@ -18,6 +18,10 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
 
+// Concorrência real no MariaDB, fora da suíte padrão (tests/Concurrency/connection.php). Sem RefreshDatabase:
+// os processos paralelos precisam enxergar os dados gravados pelo teste.
+pest()->extend(TestCase::class)->in('Concurrency');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations

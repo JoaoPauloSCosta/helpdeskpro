@@ -22,11 +22,9 @@ use App\Models\User;
 use App\Policies\TicketPolicy;
 use App\Support\SlaClock;
 use App\Support\TicketListingQuery;
-use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -181,6 +179,19 @@ class TicketController extends Controller
         return to_route('tickets.show', $ticket)->with('ticketCreated', $ticket->ticket_number);
     }
 
+    /** @return array<string, mixed>|null */
+    private function chatSummary(Ticket $ticket): ?array
+    {
+        $session = $ticket->chatSession()->with('technician:id,name')->withCount('messages')->first();
+
+        return $session ? [
+            'technician' => $session->technician?->name,
+            'started_at' => $session->created_at->toIso8601String(),
+            'ended_at' => $session->ended_at?->toIso8601String(),
+            'messages' => $session->messages_count,
+        ] : null;
+    }
+
     /**
      * CHA-03 — Detalhes do chamado. Nada é carregado antes da autorização, e comentários
      * passam pelo mesmo controle: notas internas são excluídas na consulta (RF-11).
@@ -271,6 +282,8 @@ class TicketController extends Controller
                 ],
             ],
             'comments' => $comments,
+            // Chamado gerado por um atendimento via chat (RF-34): só o resumo; a conversa é lida sob demanda.
+            'chatSession' => $this->chatSummary($ticket),
             // Anexos da abertura (públicos).
             'attachments' => $ticket->attachments()
                 ->whereNull('ticket_comment_id')

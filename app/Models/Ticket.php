@@ -113,6 +113,12 @@ class Ticket extends Model
         return $this->hasMany(TicketSlaPause::class);
     }
 
+    /** Sessão de chat que gerou o chamado (RF-34), se houver. O banco garante no máximo uma. */
+    public function chatSession(): HasOne
+    {
+        return $this->hasOne(ChatSession::class);
+    }
+
     /** A pausa em andamento, se houver. O banco garante no máximo uma por chamado. */
     public function activeSlaPause(): HasOne
     {

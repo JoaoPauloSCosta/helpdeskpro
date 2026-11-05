@@ -80,6 +80,7 @@ class TicketAuditController extends Controller
                 $this->value('Categoria', $new['category']['label'] ?? null),
                 $this->value('Departamento', $new['department']['label'] ?? null),
             ], [
+                $this->detail('Origem', isset($new['chat_session_id']) ? "Atendimento via chat nº {$new['chat_session_id']}" : null),
                 $this->detail('Título', $new['title'] ?? null),
                 ($new['sla']['no_policy'] ?? false)
                     ? $this->detail('SLA', 'Sem política ativa para a prioridade: o chamado abriu sem prazo definido.')
@@ -140,8 +141,8 @@ class TicketAuditController extends Controller
             TicketEvent::Closed => [null, 'neutral', ($new['automatic'] ?? false)
                 ? "Encerrado automaticamente: {$new['auto_close_days']} dias sem reabertura pelo solicitante."
                 : null, [$this->change('Status', $old, $new)], [
-                $this->detail('Encerrado em', $new['closed_at'] ?? null, 'datetime'),
-            ]],
+                    $this->detail('Encerrado em', $new['closed_at'] ?? null, 'datetime'),
+                ]],
             TicketEvent::SlaTargetsChanged => [null, 'primary', null, [
                 $this->change('Prioridade', $old['priority'] ?? [], $new['priority'] ?? []),
                 $this->minutes('Meta de primeira resposta', $old['first_response_minutes'] ?? null, $new['first_response_minutes'] ?? null),
@@ -154,7 +155,7 @@ class TicketAuditController extends Controller
                 $this->detail('Tempo de resolução consumido', $new['consumed_seconds'] ?? null, 'duration'),
             ]],
             TicketEvent::SlaBreached => [
-                ($new['indicator'] ?? null) === 'first_response' ?'Primeira resposta fora do prazo' : 'Resolução fora do prazo',
+                ($new['indicator'] ?? null) === 'first_response' ? 'Primeira resposta fora do prazo' : 'Resolução fora do prazo',
                 'danger', null, [], [
                     $this->detail('Prazo violado', $new['due_at'] ?? null, 'datetime'),
                     $this->detail('Violação registrada em', $new['breached_at'] ?? null, 'datetime'),
