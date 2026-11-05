@@ -102,8 +102,8 @@ const subtitle = computed(() => {
                 </div>
 
                 <form class="border-t border-neutral-200 bg-white p-3" novalidate @submit.prevent="requestChat">
+                    <label class="mb-1.5 block text-sm font-medium text-neutral-900" for="chat-widget-subject">Digite o assunto do seu atendimento</label>
                     <div class="flex items-center gap-2">
-                        <label class="sr-only" for="chat-widget-subject">Assunto do atendimento</label>
                         <input
                             id="chat-widget-subject"
                             v-model="subject"
